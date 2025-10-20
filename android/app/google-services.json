@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "174594141959",
+    "project_id": "gymnow-e1ebd",
+    "storage_bucket": "gymnow-e1ebd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:174594141959:android:8e7ae64e73c75a971edfa2",
+        "android_client_info": {
+          "package_name": "com.example.gym_now"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeJ_RjjKs9WUrBd8WnPKev9jvpej0QuAM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
