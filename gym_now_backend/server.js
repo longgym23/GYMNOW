@@ -27,7 +27,7 @@ let genAI;
 let model;
 if (GEMINI_API_KEY) {
   genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  model = genAI.getGenerativeModel({ model: "gemini-pro" });
+  model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
 } else {
    console.warn("Cảnh báo: GEMINI_API_KEY không được cung cấp. Chức năng AI sẽ không hoạt động.");
 }
