@@ -5,38 +5,28 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const admin = require("firebase-admin"); // Import Firebase Admin
 
 // --- Cấu hình ---
-const PORT = process.env.PORT || 3000; // Render sẽ tự cung cấp PORT
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // Lấy API key từ biến môi trường
+const PORT = process.env.PORT || 3000;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Khởi tạo Firebase Admin SDK (KHÔNG cần require file key ở đây)
-// Firebase Admin SDK sẽ tự động tìm biến môi trường GOOGLE_APPLICATION_CREDENTIALS
-// const serviceAccount = require("./serviceAccountKey.json"); // <<< DÒNG NÀY ĐÃ BỊ XÓA/COMMENT
-
-admin.initializeApp({
-  // credential: admin.credential.cert(serviceAccount), // <<< DÒNG NÀY ĐÃ BỊ XÓA/COMMENT
-}); // <<< KHỞI TẠO KHÔNG CẦN THAM SỐ
+// Khởi tạo Firebase Admin SDK (Tự động đọc GOOGLE_APPLICATION_CREDENTIALS)
+admin.initializeApp();
 
 // Khởi tạo Gemini
-if (!GEMINI_API_KEY) {
-  console.error("Lỗi: Biến môi trường GEMINI_API_KEY chưa được đặt.");
-  // Nên thoát ra để tránh lỗi không mong muốn
-  // process.exit(1); // Bạn có thể bỏ comment dòng này nếu muốn server dừng hẳn khi thiếu key Gemini
-}
-// Chỉ khởi tạo Gemini nếu có API key
 let genAI;
 let model;
-if (GEMINI_API_KEY) {
-  genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+if (!GEMINI_API_KEY) {
+  console.error("Lỗi: Biến môi trường GEMINI_API_KEY chưa được đặt.");
 } else {
-   console.warn("Cảnh báo: GEMINI_API_KEY không được cung cấp. Chức năng AI sẽ không hoạt động.");
+  genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  // **SỬ DỤNG MÔ HÌNH NHANH HƠN**
+  model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+  console.log("Đã khởi tạo mô hình Gemini: gemini-2.5-flash-lite");
 }
-
 
 // Khởi tạo Express App
 const app = express();
-app.use(cors()); // Cho phép gọi từ tên miền khác (app Flutter)
-app.use(express.json()); // Xử lý request body dạng JSON
+app.use(cors());
+app.use(express.json());
 
 // --- Middleware Xác thực Token ---
 const authenticateToken = async (req, res, next) => {
@@ -47,11 +37,10 @@ const authenticateToken = async (req, res, next) => {
   const idToken = authHeader.split("Bearer ")[1];
   try {
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    req.userId = decodedToken.uid; // Gắn userId vào request để hàm xử lý dùng
-    next(); // Chuyển tiếp request đến hàm xử lý chính
+    req.userId = decodedToken.uid;
+    next();
   } catch (error) {
     console.error("Lỗi xác thực token:", error);
-    // Phân biệt lỗi token hết hạn và token không hợp lệ
     if (error.code === 'auth/id-token-expired') {
       return res.status(401).send({ error: "Mã xác thực đã hết hạn." });
     }
@@ -61,14 +50,13 @@ const authenticateToken = async (req, res, next) => {
 
 // --- Định nghĩa API Endpoint ---
 app.post("/askPTAI", authenticateToken, async (req, res) => {
-  // Kiểm tra xem model Gemini đã được khởi tạo chưa
   if (!model) {
-     console.error("Lỗi: Mô hình Gemini chưa sẵn sàng (thiếu API key?).");
+     console.error("Lỗi: Mô hình Gemini chưa sẵn sàng.");
      return res.status(503).send({ error: "Dịch vụ AI hiện không sẵn sàng." });
   }
 
   const userMessage = req.body.message;
-  const userId = req.userId; // Lấy userId từ middleware
+  const userId = req.userId;
 
   if (!userMessage || typeof userMessage !== "string" || userMessage.trim() === "") {
     return res.status(400).send({ error: "Tin nhắn không được để trống." });
@@ -77,23 +65,45 @@ app.post("/askPTAI", authenticateToken, async (req, res) => {
   console.log(`Nhận tin nhắn từ user ${userId}: "${userMessage}"`);
 
   try {
-    const prompt = `Bạn là một Huấn luyện viên Cá nhân (PT) AI thân thiện và hiểu biết về fitness và dinh dưỡng. Hãy trả lời câu hỏi sau của người dùng một cách ngắn gọn, hữu ích và tạo động lực: "${userMessage}"`;
+    // **PROMPT ĐÃ ĐƯỢC TỐI ƯU**
+    const prompt = `
+Bạn là một Huấn luyện viên Cá nhân AI (PT AI) chuyên nghiệp, thân thiện và am hiểu.
+Vai trò của bạn là đưa ra lời khuyên về fitness và dinh dưỡng an toàn, thực tế.
+
+**QUY TẮC TRẢ LỜI:**
+* Trả lời bằng **tiếng Việt**.
+* **Ngắn gọn, rõ ràng, đi thẳng vào vấn đề.**
+* **KHÔNG sử dụng** định dạng Markdown như dấu sao (*), thăng (#), gạch ngang (- ở đầu dòng), hay ký tự backtick (\`). Sử dụng văn bản thuần túy. Nếu cần liệt kê, dùng dấu chấm tròn (•) hoặc số.
+* Nếu đưa ra thực đơn hoặc lịch tập, trình bày dễ đọc.
+* Luôn nhấn mạnh tầm quan trọng của việc tham khảo ý kiến chuyên gia y tế nếu cần.
+
+**Câu hỏi của người dùng:** "${userMessage}"
+
+Hãy trả lời câu hỏi trên dựa theo vai trò và quy tắc đã nêu.`;
+
+    // --- Gọi Gemini API ---
     const result = await model.generateContent(prompt);
     const response = await result.response;
 
-    // Kiểm tra kỹ hơn phản hồi từ Gemini
     if (!response || typeof response.text !== 'function') {
        console.error(`Lỗi Gemini cho user ${userId}: Phản hồi không hợp lệ từ API.`);
        return res.status(500).send({ error: "AI không tạo được phản hồi hợp lệ." });
     }
 
-    const aiText = response.text();
-    console.log(`Phản hồi từ Gemini cho user ${userId}: "${aiText}"`);
-    return res.status(200).send({ reply: aiText });
+    let aiText = response.text(); // Lấy text gốc
+
+    // **LÀM SẠCH MARKDOWN CƠ BẢN**
+    aiText = aiText.replace(/[*#`]/g, ''); // Xóa các ký tự Markdown phổ biến
+    aiText = aiText.replace(/^- /gm, '• '); // Thay gạch đầu dòng Markdown bằng dấu chấm tròn
+    aiText = aiText.trim(); // Xóa khoảng trắng thừa ở đầu/cuối
+
+    console.log(`Phản hồi (đã làm sạch) cho user ${userId}: "${aiText}"`);
+
+    // --- Trả lời về cho app Flutter ---
+    return res.status(200).send({ reply: aiText }); // Gửi text đã làm sạch
 
   } catch (error) {
     console.error(`Lỗi khi gọi Gemini API cho user ${userId}:`, error);
-    // Gửi lỗi chung chung hơn cho client
     return res.status(500).send({ error: "Đã xảy ra lỗi khi giao tiếp với AI." });
   }
 });
@@ -102,3 +112,5 @@ app.post("/askPTAI", authenticateToken, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server đang chạy tại cổng ${PORT}`);
 });
+
+// **ĐOẠN CODE BỊ LẶP Ở CUỐI ĐÃ ĐƯỢC XÓA BỎ**
