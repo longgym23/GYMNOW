@@ -26,10 +26,12 @@ if (!GEMINI_API_KEY) {
 // Khởi tạo Express App
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Tăng giới hạn kích thước body request để chứa ảnh base64 (ví dụ: 10mb)
+app.use(express.json({ limit: "10mb" }));
 
 // --- Middleware Xác thực Token ---
 const authenticateToken = async (req, res, next) => {
+  // ... (code middleware giữ nguyên) ...
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).send({ error: "Yêu cầu cần mã xác thực Bearer." });
@@ -48,14 +50,17 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// --- Định nghĩa API Endpoint ---
+// --- Định nghĩa API Endpoint (ĐÃ CẬP NHẬT) ---
 app.post("/askPTAI", authenticateToken, async (req, res) => {
   if (!model) {
      console.error("Lỗi: Mô hình Gemini chưa sẵn sàng.");
      return res.status(503).send({ error: "Dịch vụ AI hiện không sẵn sàng." });
   }
 
-  const userMessage = req.body.message;
+  // **NHẬN DỮ LIỆU MỚI TỪ FLUTTER**
+  const userMessage = req.body.message || ""; // Lấy text (hoặc chuỗi rỗng nếu chỉ gửi ảnh)
+  const imageBase64 = req.body.imageBase64;
+  const imageMimeType = req.body.mimeType;
   const userId = req.userId;
 
   if (!userMessage || typeof userMessage !== "string" || userMessage.trim() === "") {
@@ -65,24 +70,34 @@ app.post("/askPTAI", authenticateToken, async (req, res) => {
   console.log(`Nhận tin nhắn từ user ${userId}: "${userMessage}"`);
 
   try {
-    // **PROMPT ĐÃ ĐƯỢC TỐI ƯU**
-    const prompt = `
+    // **CẬP NHẬT PROMPT ĐỂ XỬ LÝ ẢNH**
+    const promptText = `
 Bạn là một Huấn luyện viên Cá nhân AI (PT AI) chuyên nghiệp, thân thiện và am hiểu.
-Vai trò của bạn là đưa ra lời khuyên về fitness và dinh dưỡng an toàn, thực tế.
+Vai trò của bạn là đưa ra lời khuyên về fitness và dinh dưỡng.
+* Trả lời bằng **tiếng Việt**, **ngắn gọn**, **không dùng Markdown** (*, #, \`).
+* Nếu có ảnh, hãy phân tích ảnh đó trong ngữ cảnh câu hỏi. Ví dụ: ước tính calo món ăn, nhận xét tư thế tập, nhận diện thực phẩm.
+* Nếu không có ảnh, chỉ trả lời câu hỏi văn bản.
 
-**QUY TẮC TRẢ LỜI:**
-* Trả lời bằng **tiếng Việt**.
-* **Ngắn gọn, rõ ràng, đi thẳng vào vấn đề.**
-* **KHÔNG sử dụng** định dạng Markdown như dấu sao (*), thăng (#), gạch ngang (- ở đầu dòng), hay ký tự backtick (\`). Sử dụng văn bản thuần túy. Nếu cần liệt kê, dùng dấu chấm tròn (•) hoặc số.
-* Nếu đưa ra thực đơn hoặc lịch tập, trình bày dễ đọc.
-* Luôn nhấn mạnh tầm quan trọng của việc tham khảo ý kiến chuyên gia y tế nếu cần.
+**Câu hỏi/yêu cầu:** "${userMessage}"`;
 
-**Câu hỏi của người dùng:** "${userMessage}"
+    let contentToGenerate;
 
-Hãy trả lời câu hỏi trên dựa theo vai trò và quy tắc đã nêu.`;
-
+    if (imageBase64 && imageMimeType) {
+      // **TẠO PROMPT ĐA PHƯƠNG TIỆN (TEXT + ẢNH)**
+      const imagePart = {
+        inlineData: {
+          mimeType: imageMimeType,
+          data: imageBase64,
+        },
+      };
+      contentToGenerate = [promptText, imagePart]; // Gửi mảng gồm text và ảnh
+    } else {
+      // **TẠO PROMPT CHỈ TEXT**
+      contentToGenerate = [promptText]; // Chỉ gửi text
+    }
+    
     // --- Gọi Gemini API ---
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(contentToGenerate); // Gửi nội dung đã chuẩn bị
     const response = await result.response;
 
     if (!response || typeof response.text !== 'function') {
@@ -112,5 +127,3 @@ Hãy trả lời câu hỏi trên dựa theo vai trò và quy tắc đã nêu.`;
 app.listen(PORT, () => {
   console.log(`Server đang chạy tại cổng ${PORT}`);
 });
-
-// **ĐOẠN CODE BỊ LẶP Ở CUỐI ĐÃ ĐƯỢC XÓA BỎ**
