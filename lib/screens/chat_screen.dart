@@ -1,12 +1,15 @@
-
-import 'dart:async'; // Cần cho TimeoutException
-import 'dart:convert'; // Cần để mã hóa/giải mã JSON
-import 'package:http/http.dart' as http; // Cần để gọi API HTTP
-import 'package:firebase_auth/firebase_auth.dart'; // Cần để lấy thông tin người dùng
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:uuid/uuid.dart'; // Cần để tạo ID tin nhắn
+import 'package:image_picker/image_picker.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:uuid/uuid.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);
@@ -16,29 +19,106 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  // Danh sách lưu trữ các tin nhắn trong cuộc hội thoại
   final List<types.Message> _messages = [];
-  // Thông tin người dùng hiện tại (lấy từ Firebase Auth)
-  final _user = types.User(id: FirebaseAuth.instance.currentUser?.uid ?? 'local_user');
-  // Thông tin định danh cho Chatbot AI
+  final _user = types.User(
+    id: FirebaseAuth.instance.currentUser?.uid ?? 'local_user',
+  );
   final _bot = const types.User(id: 'pt_ai_bot', firstName: 'PT AI');
-  // Biến trạng thái để biết khi nào bot đang xử lý và "soạn tin"
   bool _isBotTyping = false;
+
+  // **BIẾN MỚI CHO SPEECH-TO-TEXT**
+  final SpeechToText _speechToText = SpeechToText();
+  bool _speechEnabled = false;
+  bool _isListening = false;
+  // Controller để điều khiển nội dung ô chat
+  final TextEditingController _textController = TextEditingController();
+
+  // **BIẾN MỚI CHO GỬI ẢNH**
+  final ImagePicker _picker = ImagePicker();
+  String? _imageBase64; // Lưu ảnh đã mã hóa
+  String? _imageMimeType;
 
   @override
   void initState() {
     super.initState();
-    _addInitialMessage(); // Thêm tin nhắn chào mừng khi mở màn hình
+    _addInitialMessage();
+    _initSpeech(); // Khởi tạo speech-to-text
   }
 
-  /// Thêm tin nhắn chào mừng ban đầu từ Bot
+  @override
+  void dispose() {
+    _speechToText.stop(); // Đảm bảo dừng nghe khi thoát
+    _textController.dispose(); // Hủy controller
+    super.dispose();
+  }
+
+  /// Khởi tạo và xin quyền micro
+  void _initSpeech() async {
+    try {
+      _speechEnabled = await _speechToText.initialize(
+        onError: (errorNotification) =>
+            print('Lỗi SpeechToText: $errorNotification'),
+        onStatus: (status) =>
+            setState(() => _isListening = _speechToText.isListening),
+      );
+      if (mounted) setState(() {});
+    } catch (e) {
+      print("Lỗi khi khởi tạo SpeechToText: $e");
+      setState(() => _speechEnabled = false);
+    }
+  }
+
+  /// Bắt đầu nghe (khi nhấn giữ hoặc nhấn nút)
+  void _startListening() async {
+    if (!_speechEnabled) {
+      print("Nhận dạng giọng nói chưa được kích hoạt.");
+      return;
+    }
+    _stopListening(); // Dừng lần nghe trước nếu có
+    if (!mounted) return;
+    setState(() => _isListening = true);
+
+    await _speechToText.listen(
+      onResult: _onSpeechResult,
+      localeId: 'vi_VN', // Đặt ngôn ngữ tiếng Việt
+      listenMode: ListenMode.confirmation, // Chế độ nghe phù hợp cho dictation
+      partialResults: true, // Nhận kết quả tạm thời
+    );
+  }
+
+  /// Dừng nghe
+  void _stopListening() async {
+    if (!_isListening && !_speechToText.isListening) return;
+    await _speechToText.stop();
+    if (mounted) {
+      setState(() => _isListening = false);
+    }
+  }
+
+  /// Callback khi có kết quả nhận dạng
+  void _onSpeechResult(SpeechRecognitionResult result) {
+    setState(() {
+      // Cập nhật nội dung ô chat bằng kết quả nhận dạng
+      _textController.text = result.recognizedWords;
+      // Di chuyển con trỏ về cuối
+      _textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _textController.text.length),
+      );
+    });
+  }
+  
+
+  /// Thêm tin nhắn chào mừng (không đổi)
   void _addInitialMessage() {
-     _addMessage(types.TextMessage(
-      author: _bot,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: const Uuid().v4(),
-      text: 'Xin chào! Tôi là Huấn luyện viên AI của bạn. Bạn cần giúp đỡ gì hôm nay?',
-    ));
+    _addMessage(
+      types.TextMessage(
+        author: _bot,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: const Uuid().v4(),
+        text:
+            'Xin chào! Tôi là Huấn luyện viên AI của bạn. Bạn cần giúp đỡ gì hôm nay?',
+      ),
+    );
   }
 
   /// Hàm thêm một tin nhắn mới vào đầu danh sách (để hiển thị đúng thứ tự)
@@ -79,18 +159,25 @@ class _ChatScreenState extends State<ChatScreen> {
       final idToken = await user.getIdToken();
 
       // *** THAY THẾ BẰNG URL DỊCH VỤ RENDER CỦA BẠN ***
-      const apiUrl = 'https://gymnow-pt-ai.onrender.com/askPTAI'; // <<-- KIỂM TRA LẠI URL NÀY!
+      const apiUrl =
+          'https://gymnow-pt-ai.onrender.com/askPTAI'; // <<-- KIỂM TRA LẠI URL NÀY!
       // *************************************************
 
       // 4. Gửi yêu cầu POST đến backend Render
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $idToken', // Gửi ID Token trong header
-        },
-        body: jsonEncode({'message': message.text.trim()}), // Gửi tin nhắn trong body
-      ).timeout(const Duration(seconds: 60)); // Đặt giới hạn thời gian chờ là 60 giây
+      final response = await http
+          .post(
+            Uri.parse(apiUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken', // Gửi ID Token trong header
+            },
+            body: jsonEncode({
+              'message': message.text.trim(),
+            }), // Gửi tin nhắn trong body
+          )
+          .timeout(
+            const Duration(seconds: 60),
+          ); // Đặt giới hạn thời gian chờ là 60 giây
 
       // 5. Xử lý phản hồi từ backend
       if (response.statusCode == 200) {
@@ -106,55 +193,64 @@ class _ChatScreenState extends State<ChatScreen> {
           );
           _addMessage(botResponse);
         } else {
-           _addErrorMessage('AI không thể tạo phản hồi (dữ liệu nhận về trống).');
+          _addErrorMessage(
+            'AI không thể tạo phản hồi (dữ liệu nhận về trống).',
+          );
         }
       } else {
-         // Xử lý lỗi HTTP (ví dụ: 403 Forbidden, 500 Internal Server Error)
-         String errorMsg = 'Lỗi kết nối (${response.statusCode}). Vui lòng thử lại sau.';
-         try {
-            // Cố gắng đọc thông báo lỗi cụ thể từ backend nếu có
-            final errorData = jsonDecode(utf8.decode(response.bodyBytes));
-            if(errorData != null && errorData['error'] != null){
-               errorMsg = 'Lỗi từ AI: ${errorData['error']}';
-            }
-         } catch (e) { /* Bỏ qua nếu body không phải JSON */ }
-         print('Lỗi API Render: ${response.statusCode} - ${response.body}');
-         _addErrorMessage(errorMsg);
+        // Xử lý lỗi HTTP (ví dụ: 403 Forbidden, 500 Internal Server Error)
+        String errorMsg =
+            'Lỗi kết nối (${response.statusCode}). Vui lòng thử lại sau.';
+        try {
+          // Cố gắng đọc thông báo lỗi cụ thể từ backend nếu có
+          final errorData = jsonDecode(utf8.decode(response.bodyBytes));
+          if (errorData != null && errorData['error'] != null) {
+            errorMsg = 'Lỗi từ AI: ${errorData['error']}';
+          }
+        } catch (e) {
+          /* Bỏ qua nếu body không phải JSON */
+        }
+        print('Lỗi API Render: ${response.statusCode} - ${response.body}');
+        _addErrorMessage(errorMsg);
       }
-
-    } catch (error) { // Xử lý các lỗi khác (mạng, timeout, Flutter...)
+    } catch (error) {
+      // Xử lý các lỗi khác (mạng, timeout, Flutter...)
       print('Lỗi khi gọi API hoặc xử lý phản hồi: $error');
       if (error is TimeoutException) {
-        _addErrorMessage('Yêu cầu tới AI mất quá nhiều thời gian. Vui lòng thử lại.');
+        _addErrorMessage(
+          'Yêu cầu tới AI mất quá nhiều thời gian. Vui lòng thử lại.',
+        );
       } else {
-        _addErrorMessage('Đã xảy ra lỗi mạng hoặc không thể kết nối đến máy chủ.');
+        _addErrorMessage(
+          'Đã xảy ra lỗi mạng hoặc không thể kết nối đến máy chủ.',
+        );
       }
     } finally {
       // 6. Tắt trạng thái "đang soạn tin" sau khi hoàn tất (dù thành công hay lỗi)
-      if(mounted){
-         setState(() => _isBotTyping = false);
+      if (mounted) {
+        setState(() => _isBotTyping = false);
       }
     }
   }
 
   /// Hàm tiện ích để hiển thị tin nhắn báo lỗi từ Bot
   void _addErrorMessage(String text) {
-     final errorMessage = types.TextMessage(
-        author: _bot,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        id: const Uuid().v4(),
-        status: types.Status.error, // Đánh dấu là tin nhắn lỗi (có thể hiển thị khác biệt)
-        text: text,
-      );
-      _addMessage(errorMessage);
+    final errorMessage = types.TextMessage(
+      author: _bot,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      id: const Uuid().v4(),
+      status: types
+          .Status
+          .error, // Đánh dấu là tin nhắn lỗi (có thể hiển thị khác biệt)
+      text: text,
+    );
+    _addMessage(errorMessage);
   }
-
+  
   @override
- Widget build(BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Huấn luyện viên AI'),
-      ),
+      appBar: AppBar(title: const Text('Huấn luyện viên AI')),
       body: Chat(
         messages: _messages,
         onSendPressed: _handleSendPressed,
@@ -169,8 +265,14 @@ class _ChatScreenState extends State<ChatScreen> {
           inputTextColor: Colors.white,
           primaryColor: Theme.of(context).colorScheme.primary, // Cam
           secondaryColor: const Color(0xFF2A3B4F), // Nền tin nhắn bot
-          receivedMessageBodyTextStyle: const TextStyle(color: Colors.white, fontSize: 16),
-          sentMessageBodyTextStyle: const TextStyle(color: Colors.white, fontSize: 16),
+          receivedMessageBodyTextStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+          ),
+          sentMessageBodyTextStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+          ),
           // typingIndicatorTheme: TypingIndicatorThemeData( // <<< XÓA HOẶC COMMENT KHỐI NÀY
           //    animatedCirclesColor: AlwaysStoppedAnimation(Colors.grey[400]!),
           //    animatedCircleSize: 5,
