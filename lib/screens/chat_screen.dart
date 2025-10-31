@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:uuid/uuid.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:image_picker/image_picker.dart'; // **<-- IMPORT MỚI**
+import 'package:mime/mime.dart'; // **<-- IMPORT MỚI**
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);
@@ -20,35 +20,33 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final List<types.Message> _messages = [];
-  final _user = types.User(
-    id: FirebaseAuth.instance.currentUser?.uid ?? 'local_user',
-  );
+  final _user = types.User(id: FirebaseAuth.instance.currentUser?.uid ?? 'local_user');
   final _bot = const types.User(id: 'pt_ai_bot', firstName: 'PT AI');
   bool _isBotTyping = false;
 
-  // **BIẾN MỚI CHO SPEECH-TO-TEXT**
+  // Biến cho Speech-to-Text
   final SpeechToText _speechToText = SpeechToText();
   bool _speechEnabled = false;
   bool _isListening = false;
-  // Controller để điều khiển nội dung ô chat
   final TextEditingController _textController = TextEditingController();
 
   // **BIẾN MỚI CHO GỬI ẢNH**
   final ImagePicker _picker = ImagePicker();
   String? _imageBase64; // Lưu ảnh đã mã hóa
-  String? _imageMimeType;
+  String? _imageMimeType; // Lưu loại ảnh (ví dụ: 'image/jpeg')
+  String? _localImageUri; // Lưu đường dẫn ảnh local để hiển thị preview
 
   @override
   void initState() {
     super.initState();
     _addInitialMessage();
-    _initSpeech(); // Khởi tạo speech-to-text
+    _initSpeech();
   }
 
   @override
   void dispose() {
-    _speechToText.stop(); // Đảm bảo dừng nghe khi thoát
-    _textController.dispose(); // Hủy controller
+    _speechToText.stop();
+    _textController.dispose();
     super.dispose();
   }
 
@@ -123,68 +121,102 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Hàm thêm một tin nhắn mới vào đầu danh sách (để hiển thị đúng thứ tự)
   void _addMessage(types.Message message) {
-    // Chỉ cập nhật state nếu widget vẫn còn tồn tại trên cây widget
-    if (mounted) {
-      setState(() {
-        _messages.insert(0, message);
-      });
-    }
+    setStateIfMounted(() {
+      _messages.insert(0, message);
+    });
+  }
+
+  /// Thêm tin nhắn lỗi vào UI
+  void _addErrorMessage(String text) {
+     _addMessage(types.TextMessage(
+        author: _bot,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: const Uuid().v4(),
+        status: types.Status.error,
+        text: text,
+      ));
   }
 
   /// Xử lý khi người dùng nhấn nút gửi tin nhắn
   void _handleSendPressed(types.PartialText message) async {
-    // 1. Tạo và hiển thị tin nhắn của người dùng ngay lập tức
-    final userMessage = types.TextMessage(
-      author: _user,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: const Uuid().v4(),
-      text: message.text.trim(), // Xóa khoảng trắng thừa ở đầu/cuối
-    );
-    _addMessage(userMessage);
+    // 1. Lấy dữ liệu text và ảnh từ state
+    final String textToSend = message.text.trim();
+    final String? imageToSend = _imageBase64;
+    final String? mimeTypeToSend = _imageMimeType;
+    final String? localImageUri = _localImageUri; // Lấy URI local
 
-    // 2. Bật trạng thái "đang soạn tin"
-    if (mounted) {
-      setState(() => _isBotTyping = true);
+    // 2. Kiểm tra nếu không có gì để gửi
+    if (textToSend.isEmpty && imageToSend == null) {
+      return; // Không gửi tin nhắn rỗng
     }
 
+    // 3. Tạo tin nhắn hiển thị trên UI
+    types.Message userMessage;
+    if (imageToSend != null && localImageUri != null) {
+      // Tạo tin nhắn ảnh
+      userMessage = types.ImageMessage(
+        author: _user,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: const Uuid().v4(),
+        name: 'image.jpg',
+        size: imageToSend.length,
+        uri: localImageUri, // Dùng đường dẫn file local để hiển thị ngay lập tức
+        // text: textToSend, // Gửi kèm nội dung text (nếu có)
+      );
+    } else {
+      // Tạo tin nhắn text
+      userMessage = types.TextMessage(
+        author: _user,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: const Uuid().v4(),
+        text: textToSend,
+      );
+    }
+
+    _addMessage(userMessage);
+
+    // 4. Reset state và bật loading
+    setStateIfMounted(() {
+      _isBotTyping = true;
+      _imageBase64 = null;
+      _imageMimeType = null;
+      _localImageUri = null;
+    });
+    _textController.clear();
+
+    // --- 5. Bắt đầu gọi API ---
     try {
-      // 3. Lấy thông tin xác thực người dùng
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        _addErrorMessage('Lỗi: Bạn cần đăng nhập để sử dụng tính năng này.');
-        if (mounted) setState(() => _isBotTyping = false);
+        _addErrorMessage('Lỗi: Bạn cần đăng nhập để hỏi AI.');
+        setStateIfMounted(() => _isBotTyping = false);
         return;
       }
-      // Lấy ID Token để gửi lên backend xác thực
       final idToken = await user.getIdToken();
+      
+      // *** THAY THẾ BẰNG URL RENDER CỦA BẠN ***
+      const apiUrl = 'https://gymnow-pt-ai.onrender.com/askPTAI'; // <<-- KIỂM TRA LẠI URL NÀY!
+      // ****************************************
 
-      // *** THAY THẾ BẰNG URL DỊCH VỤ RENDER CỦA BẠN ***
-      const apiUrl =
-          'https://gymnow-pt-ai.onrender.com/askPTAI'; // <<-- KIỂM TRA LẠI URL NÀY!
-      // *************************************************
+      final requestBody = jsonEncode({
+        'message': textToSend,
+        'imageBase64': imageToSend, // Sẽ là null nếu không có ảnh
+        'mimeType': mimeTypeToSend, // Sẽ là null nếu không có ảnh
+      });
 
-      // 4. Gửi yêu cầu POST đến backend Render
-      final response = await http
-          .post(
-            Uri.parse(apiUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $idToken', // Gửi ID Token trong header
-            },
-            body: jsonEncode({
-              'message': message.text.trim(),
-            }), // Gửi tin nhắn trong body
-          )
-          .timeout(
-            const Duration(seconds: 60),
-          ); // Đặt giới hạn thời gian chờ là 60 giây
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+        body: requestBody,
+      ).timeout(const Duration(seconds: 90)); // Tăng timeout cho upload ảnh
 
-      // 5. Xử lý phản hồi từ backend
+      // 6. Xử lý phản hồi (giữ nguyên logic cũ)
       if (response.statusCode == 200) {
-        // Giải mã phản hồi JSON (sử dụng utf8 để hỗ trợ tiếng Việt)
         final data = jsonDecode(utf8.decode(response.bodyBytes));
         if (data != null && data['reply'] != null) {
-          // Tạo và hiển thị tin nhắn trả lời của Bot
           final botResponse = types.TextMessage(
             author: _bot,
             createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -193,64 +225,177 @@ class _ChatScreenState extends State<ChatScreen> {
           );
           _addMessage(botResponse);
         } else {
-          _addErrorMessage(
-            'AI không thể tạo phản hồi (dữ liệu nhận về trống).',
-          );
+           _addErrorMessage('AI không thể tạo phản hồi (dữ liệu trống).');
         }
       } else {
-        // Xử lý lỗi HTTP (ví dụ: 403 Forbidden, 500 Internal Server Error)
-        String errorMsg =
-            'Lỗi kết nối (${response.statusCode}). Vui lòng thử lại sau.';
-        try {
-          // Cố gắng đọc thông báo lỗi cụ thể từ backend nếu có
-          final errorData = jsonDecode(utf8.decode(response.bodyBytes));
-          if (errorData != null && errorData['error'] != null) {
-            errorMsg = 'Lỗi từ AI: ${errorData['error']}';
-          }
-        } catch (e) {
-          /* Bỏ qua nếu body không phải JSON */
-        }
-        print('Lỗi API Render: ${response.statusCode} - ${response.body}');
-        _addErrorMessage(errorMsg);
+         String errorMsg = 'Lỗi kết nối (${response.statusCode}). Vui lòng thử lại.';
+         try {
+            final errorData = jsonDecode(utf8.decode(response.bodyBytes));
+            if(errorData['error'] != null){ errorMsg = 'Lỗi từ AI: ${errorData['error']}'; }
+         } catch (e) { /* Bỏ qua */ }
+         print('Lỗi API Render: ${response.statusCode} - ${response.body}');
+         _addErrorMessage(errorMsg);
       }
-    } catch (error) {
-      // Xử lý các lỗi khác (mạng, timeout, Flutter...)
-      print('Lỗi khi gọi API hoặc xử lý phản hồi: $error');
+
+    } catch (error) { // 7. Xử lý lỗi (giữ nguyên logic cũ)
+      print('Lỗi gọi API: $error');
       if (error is TimeoutException) {
-        _addErrorMessage(
-          'Yêu cầu tới AI mất quá nhiều thời gian. Vui lòng thử lại.',
-        );
+        _addErrorMessage('Yêu cầu tới AI mất quá nhiều thời gian. Vui lòng thử lại.');
       } else {
-        _addErrorMessage(
-          'Đã xảy ra lỗi mạng hoặc không thể kết nối đến máy chủ.',
-        );
+        _addErrorMessage('Đã xảy ra lỗi mạng hoặc kết nối.');
       }
     } finally {
-      // 6. Tắt trạng thái "đang soạn tin" sau khi hoàn tất (dù thành công hay lỗi)
-      if (mounted) {
-        setState(() => _isBotTyping = false);
-      }
+      setStateIfMounted(() => _isBotTyping = false);
     }
   }
 
-  /// Hàm tiện ích để hiển thị tin nhắn báo lỗi từ Bot
-  void _addErrorMessage(String text) {
-    final errorMessage = types.TextMessage(
-      author: _bot,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: const Uuid().v4(),
-      status: types
-          .Status
-          .error, // Đánh dấu là tin nhắn lỗi (có thể hiển thị khác biệt)
-      text: text,
+  /// Xử lý khi nhấn nút đính kèm (📎)
+  void _handleAttachmentPressed() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1B263B), // Đặt màu nền cho bottom sheet
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.photo_camera, color: Colors.white),
+                title: const Text('Chụp ảnh mới', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.white),
+                title: const Text('Chọn từ thư viện', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
-    _addMessage(errorMessage);
+  }
+
+  /// Lấy ảnh và chuyển thành Base64
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 800, // Giảm kích thước ảnh để gửi nhanh hơn
+        imageQuality: 70, // Giảm chất lượng ảnh
+      );
+
+      if (pickedFile != null) {
+        final imageBytes = await pickedFile.readAsBytes();
+        final base64Image = base64Encode(imageBytes);
+        final mimeType = lookupMimeType(pickedFile.path) ?? 'image/jpeg';
+
+        // Lưu ảnh vào state để chuẩn bị gửi
+        setStateIfMounted(() {
+          _imageBase64 = base64Image;
+          _imageMimeType = mimeType;
+          _localImageUri = pickedFile.path; // Lưu đường dẫn file local để hiển thị
+        });
+
+        // Tự động gửi ảnh (kèm theo bất kỳ text nào đang có trong ô)
+        _handleSendPressed(types.PartialText(text: _textController.text));
+      }
+    } catch (e) {
+      print("Lỗi chọn ảnh: $e");
+      _addErrorMessage("Không thể chọn ảnh. Vui lòng thử lại.");
+    }
   }
   
+  // Hàm tiện ích để gọi setState an toàn
+  void setStateIfMounted(VoidCallback fn) {
+    if (mounted) {
+      setState(fn);
+    }
+  }
+
+ Widget _buildInputArea() {
+  return Container(
+    color: const Color(0xFF1B263B), // Màu nền của thanh input
+    child: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+        child: Row(
+          children: [
+            // Nút attach (leading)
+            IconButton(
+              icon: Icon(Icons.attach_file, color: Theme.of(context).colorScheme.primary),
+              onPressed: _handleAttachmentPressed,
+              tooltip: 'Gửi ảnh',
+            ),
+            // Ô nhập text (Expanded để chiếm hết không gian)
+            Expanded(
+              child: TextField(
+                controller: _textController,
+                autofocus: false,
+                minLines: 1,
+                maxLines: 4, // Cho phép multiline
+                keyboardType: TextInputType.multiline,
+                decoration: InputDecoration(
+                  hintText: 'Nhập tin nhắn...',
+                  hintStyle: TextStyle(color: Colors.grey[400]),
+                  filled: true,
+                  fillColor: const Color(0xFF2A3B4F), // Nền ô text
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30.0),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                ),
+                style: const TextStyle(color: Colors.white),
+                onSubmitted: (text) {
+                  if (text.trim().isNotEmpty) {
+                    _handleSendPressed(types.PartialText(text: text));
+                  }
+                },
+              ),
+            ),
+            // Nút mic (trailing 1)
+            IconButton(
+              icon: Icon(
+                _isListening ? Icons.mic_off : Icons.mic,
+                color: _isListening ? Colors.redAccent : Theme.of(context).colorScheme.primary,
+              ),
+              onPressed: _speechEnabled ? (_isListening ? _stopListening : _startListening) : null,
+              tooltip: _isListening ? 'Dừng ghi âm' : 'Bắt đầu ghi âm',
+            ),
+            // Nút send (trailing 2, chỉ hiện khi có text hoặc ảnh)
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _textController,
+              builder: (context, value, child) {
+                final hasContent = value.text.trim().isNotEmpty || _imageBase64 != null;
+                return IconButton(
+                  icon: Icon(Icons.send, color: hasContent ? Theme.of(context).colorScheme.primary : Colors.grey),
+                  onPressed: hasContent
+                      ? () => _handleSendPressed(types.PartialText(text: _textController.text))
+                      : null,
+                  tooltip: 'Gửi',
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Huấn luyện viên AI')),
+      appBar: AppBar(
+        title: const Text('Huấn luyện viên AI'),
+      ),
       body: Chat(
         messages: _messages,
         onSendPressed: _handleSendPressed,
@@ -258,29 +403,16 @@ class _ChatScreenState extends State<ChatScreen> {
         typingIndicatorOptions: TypingIndicatorOptions(
           typingUsers: _isBotTyping ? [_bot] : [],
         ),
-        // **SỬA LỖI Ở ĐÂY: XÓA KHỐI typingIndicatorTheme**
         theme: DefaultChatTheme(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           inputBackgroundColor: const Color(0xFF1B263B),
           inputTextColor: Colors.white,
           primaryColor: Theme.of(context).colorScheme.primary, // Cam
           secondaryColor: const Color(0xFF2A3B4F), // Nền tin nhắn bot
-          receivedMessageBodyTextStyle: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-          ),
-          sentMessageBodyTextStyle: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-          ),
-          // typingIndicatorTheme: TypingIndicatorThemeData( // <<< XÓA HOẶC COMMENT KHỐI NÀY
-          //    animatedCirclesColor: AlwaysStoppedAnimation(Colors.grey[400]!),
-          //    animatedCircleSize: 5,
-          //    bubbleColor: const Color(0xFF2A3B4F),
-          //    countAvatarColor: Theme.of(context).colorScheme.primary,
-          //    countTextColor: Colors.white,
-          // )
+          receivedMessageBodyTextStyle: const TextStyle(color: Colors.white, fontSize: 16),
+          sentMessageBodyTextStyle: const TextStyle(color: Colors.white, fontSize: 16),
         ),
+        customBottomWidget: _buildInputArea(),
         emptyState: const Center(child: Text("Bắt đầu trò chuyện với PT AI!")),
       ),
     );
