@@ -5,12 +5,17 @@ class DatabaseService {
   final String? uid;
   DatabaseService({this.uid});
 
-  final CollectionReference userCollection =
-      FirebaseFirestore.instance.collection('users');
+  final CollectionReference userCollection = FirebaseFirestore.instance
+      .collection('users');
 
   // **SỬA ĐỔI 1: Thêm 'role' vào hàm cập nhật dữ liệu**
   Future<void> updateUserData(
-      String name, String email, double height, double weight, String role) async {
+    String name,
+    String email,
+    double height,
+    double weight,
+    String role,
+  ) async {
     return await userCollection.doc(uid).set({
       'name': name,
       'email': email,
@@ -29,7 +34,7 @@ class DatabaseService {
   Future<DocumentSnapshot> getUserData() async {
     return await userCollection.doc(uid).get();
   }
-  
+
   // **THÊM MỚI 2: Hàm lấy tất cả người dùng cho Admin**
   // Không cần uid vì Admin có quyền xem tất cả
   Stream<QuerySnapshot> getAllUsersStream() {
@@ -54,5 +59,19 @@ class DatabaseService {
         .doc(uid)
         .collection('sessions');
     return workoutCollection.orderBy('startTime', descending: true).snapshots();
+  }
+
+  // Hàm xóa buổi tập luyện
+  Future<void> deleteWorkoutSession(String sessionId) async {
+    try {
+      final workoutCollection = FirebaseFirestore.instance
+          .collection('workouts')
+          .doc(uid)
+          .collection('sessions');
+      await workoutCollection.doc(sessionId).delete();
+    } catch (e) {
+      print('Lỗi khi xóa buổi tập: $e');
+      rethrow;
+    }
   }
 }

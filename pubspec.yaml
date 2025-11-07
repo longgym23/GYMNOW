@@ -80,6 +80,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.jpg
+    - assets/images/chatbot.png
+    - assets/images/Anh/
+    - assets/images/Anh2/
+    - csv_importer/Giamcan.csv
+    - csv_importer/Giudang.csv
+    - csv_importer/Tangco.csv
+    - csv_importer/Giảm Cân.csv
+    - csv_importer/Giữ Dáng.csv
+    - csv_importer/Tăng Cơ.csv
+    - csv_importer/macro_tung_mon.csv
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
