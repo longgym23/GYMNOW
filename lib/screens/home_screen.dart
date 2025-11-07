@@ -53,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 (route) => false,
               );
             },
-          )
+          ),
         ],
       ),
       body: FutureBuilder(
@@ -63,10 +63,12 @@ class _HomeScreenState extends State<HomeScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-             return const Center(child: Text('Lỗi tải dữ liệu người dùng.'));
+            return const Center(child: Text('Lỗi tải dữ liệu người dùng.'));
           }
           if (snapshot.hasData && snapshot.data!.exists) {
-            String userName = (snapshot.data!.data() as Map<String, dynamic>)['name'] ?? 'Bạn';
+            String userName =
+                (snapshot.data!.data() as Map<String, dynamic>)['name'] ??
+                'Bạn';
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
@@ -88,31 +90,48 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Card đếm bước chân
                   Card(
                     color: const Color(0xFF1B263B),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(20.0),
                       child: Row(
                         children: [
-                          Icon(Icons.directions_walk, size: 40, color: Theme.of(context).colorScheme.secondary),
+                          Icon(
+                            Icons.directions_walk,
+                            size: 40,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
                           const SizedBox(width: 20),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Số bước chân hôm nay', style: TextStyle(fontSize: 16, color: Colors.white70)),
+                                const Text(
+                                  'Số bước chân hôm nay',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white70,
+                                  ),
+                                ),
                                 StreamBuilder<StepCount>(
                                   stream: _stepCountStream,
                                   builder: (context, snapshot) {
-                                    int steps = snapshot.hasData ? snapshot.data!.steps : 0;
+                                    int steps = snapshot.hasData
+                                        ? snapshot.data!.steps
+                                        : 0;
                                     return Text(
                                       '$steps',
-                                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     );
                                   },
                                 ),
                               ],
                             ),
-                          )
+                          ),
                         ],
                       ),
                     ),
@@ -129,10 +148,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const SelectActivityScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => const SelectActivityScreen(),
+                          ),
                         );
                       },
-                      child: const Text('Bắt đầu Luyện tập', style: TextStyle(fontSize: 18)),
+                      child: const Text(
+                        'Bắt đầu Luyện tập',
+                        style: TextStyle(fontSize: 18),
+                      ),
                     ),
                   ),
 
@@ -144,13 +168,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: const Icon(Icons.chat_bubble_outline),
                       label: const Text('Hỏi PT AI'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.secondary, // Màu xanh dương
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.secondary, // Màu xanh dương
                         padding: const EdgeInsets.symmetric(vertical: 15),
                       ),
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const ChatScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => const ChatScreen(),
+                          ),
                         );
                       },
                     ),
@@ -160,8 +188,49 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
           // Trường hợp không tìm thấy document user (ví dụ: user tạo trên Auth nhưng chưa login lần nào)
-          return const Center(child: Text('Không tìm thấy dữ liệu hồ sơ người dùng.'));
+          return const Center(
+            child: Text('Không tìm thấy dữ liệu hồ sơ người dùng.'),
+          );
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ChatScreen()),
+          );
+        },
+        backgroundColor: Colors.orange.shade400,
+        elevation: 8,
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [Colors.orange.shade300, Colors.orange.shade600],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.orange.withOpacity(0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/chatbot.png',
+            width: 40,
+            height: 40,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              // Fallback icon nếu không tìm thấy ảnh
+              return const Icon(Icons.smart_toy, color: Colors.white, size: 32);
+            },
+          ),
+        ),
       ),
     );
   }

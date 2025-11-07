@@ -123,6 +123,70 @@ Vai trò của bạn là đưa ra lời khuyên về fitness và dinh dưỡng.
   }
 });
 
+// --- Phân tích ảnh món ăn, trả về JSON dinh dưỡng ---
+app.post("/analyze-food-image", authenticateToken, async (req, res) => {
+  if (!model) {
+    return res.status(503).send({ error: "Dịch vụ AI hiện không sẵn sàng." });
+  }
+
+  const imageBase64 = req.body.imageBase64;
+  const imageMimeType = req.body.mimeType;
+  if (!imageBase64 || !imageMimeType) {
+    return res.status(400).send({ error: "Thiếu ảnh (imageBase64, mimeType)." });
+  }
+
+  try {
+    const prompt = `Bạn là chuyên gia dinh dưỡng. Hãy nhận diện món ăn trong ảnh và ước tính thông tin sau theo khẩu phần nhìn thấy.
+Trả lời CHỈ DƯỚI DẠNG JSON hợp lệ, không kèm giải thích:
+{
+  "dishName": string,
+  "ingredients": string[],
+  "servingUnit": string, // ví dụ: 1 dĩa, 1 chén, 100g
+  "calories": number, // kcal
+  "protein": number, // gram
+  "carbs": number, // gram
+  "fat": number, // gram
+  "fiber": number // gram (có thể 0 nếu không chắc)
+}`;
+
+    const imagePart = {
+      inlineData: { mimeType: imageMimeType, data: imageBase64 },
+    };
+
+    const result = await model.generateContent([prompt, imagePart]);
+    const response = await result.response;
+    const text = (response && typeof response.text === 'function') ? response.text() : '';
+
+    // Cố gắng trích JSON từ văn bản trả về
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(500).send({ error: "AI không trả về JSON hợp lệ." });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      return res.status(500).send({ error: "Không thể phân tích JSON từ AI." });
+    }
+
+    // Chuẩn hóa giá trị số
+    const toNum = (v) => (typeof v === 'number' ? v : parseFloat(v) || 0);
+    payload.calories = toNum(payload.calories);
+    payload.protein = toNum(payload.protein);
+    payload.carbs = toNum(payload.carbs);
+    payload.fat = toNum(payload.fat);
+    payload.fiber = toNum(payload.fiber);
+    if (!Array.isArray(payload.ingredients)) payload.ingredients = [];
+    if (!payload.servingUnit) payload.servingUnit = '1 khẩu phần';
+
+    return res.status(200).send(payload);
+  } catch (error) {
+    console.error('Lỗi /analyze-food-image:', error);
+    return res.status(500).send({ error: "Đã xảy ra lỗi khi phân tích ảnh." });
+  }
+});
+
 // --- Khởi động Server ---
 app.listen(PORT, () => {
   console.log(`Server đang chạy tại cổng ${PORT}`);
