@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:gym_now/data/default_workouts.dart'; // Import để lấy icon
 import 'package:gym_now/screens/workout_detail_screen.dart';
+import 'package:gym_now/screens/chat_screen.dart';
 import 'package:gym_now/services/database_service.dart';
 import 'package:intl/intl.dart';
 
@@ -24,9 +26,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final activityType = data['activityType'] as String;
       // Chuyển đổi an toàn từ num sang double
       final distance = (data['distanceInMeters'] as num).toDouble();
-      
+
       // Cập nhật tổng, nếu chưa có thì tạo mới
-      totals.update(activityType, (value) => value + distance, ifAbsent: () => distance);
+      totals.update(
+        activityType,
+        (value) => value + distance,
+        ifAbsent: () => distance,
+      );
     }
     return totals;
   }
@@ -35,7 +41,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   IconData _getIconForActivity(String activityName) {
     try {
       // Tìm trong danh sách defaultWorkoutTypes
-      return defaultWorkoutTypes.firstWhere((type) => type.name == activityName).icon;
+      return defaultWorkoutTypes
+          .firstWhere((type) => type.name == activityName)
+          .icon;
     } catch (e) {
       return Icons.fitness_center; // Icon mặc định nếu không tìm thấy
     }
@@ -49,12 +57,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// Hiển thị thông báo iOS style
+  void _showIOSNotification(
+    BuildContext context,
+    String message, {
+    bool isError = false,
+  }) {
+    showCupertinoDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) => CupertinoAlertDialog(
+        title: Text(isError ? 'Lỗi' : 'Thành công'),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            child: const Text('OK'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Thống kê & Lịch sử'),
-      ),
+      appBar: AppBar(title: const Text('Thống kê & Lịch sử')),
       body: StreamBuilder<QuerySnapshot>(
         stream: DatabaseService(uid: uid).getWorkoutSessionsStream(),
         builder: (context, snapshot) {
@@ -85,13 +114,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Text(
                   'Tổng kết',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
               Card(
                 color: const Color(0xFF1B263B),
                 margin: const EdgeInsets.symmetric(horizontal: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -100,13 +133,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
                         child: Row(
                           children: [
-                            Icon(_getIconForActivity(entry.key), color: Theme.of(context).colorScheme.secondary),
+                            Icon(
+                              _getIconForActivity(entry.key),
+                              color: Theme.of(context).colorScheme.secondary,
+                            ),
                             const SizedBox(width: 16),
-                            Text(entry.key, style: const TextStyle(fontSize: 16)),
+                            Text(
+                              entry.key,
+                              style: const TextStyle(fontSize: 16),
+                            ),
                             const Spacer(),
                             Text(
                               '${(entry.value / 1000).toStringAsFixed(2)} km',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),
@@ -123,25 +165,45 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Text(
                   'Lịch sử chi tiết',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
-              Expanded( // **QUAN TRỌNG**: Bọc ListView.builder trong Expanded
+              Expanded(
+                // **QUAN TRỌNG**: Bọc ListView.builder trong Expanded
                 child: ListView.builder(
                   padding: const EdgeInsets.only(top: 8),
                   itemCount: sessions.length,
                   itemBuilder: (context, index) {
-                    final sessionData = sessions[index].data() as Map<String, dynamic>;
-                    final startTime = (sessionData['startTime'] as Timestamp).toDate();
+                    final sessionData =
+                        sessions[index].data() as Map<String, dynamic>;
+                    final startTime = (sessionData['startTime'] as Timestamp)
+                        .toDate();
                     return Card(
                       color: const Color(0xFF1B263B),
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        leading: Icon(_getIconForActivity(sessionData['activityType']), color: Colors.white, size: 40),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 16,
+                        ),
+                        leading: Icon(
+                          _getIconForActivity(sessionData['activityType']),
+                          color: Colors.white,
+                          size: 40,
+                        ),
                         title: Text(
-                          DateFormat('EEEE, dd MMM yyyy', 'vi_VN').format(startTime),
+                          DateFormat(
+                            'EEEE, dd MMM yyyy',
+                            'vi_VN',
+                          ).format(startTime),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Padding(
@@ -155,7 +217,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                   const Text('Quãng đường'),
                                   Text(
                                     '${(sessionData['distanceInMeters'] / 1000).toStringAsFixed(2)} km',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -164,13 +229,76 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 children: [
                                   const Text('Thời gian'),
                                   Text(
-                                    _formatDuration(sessionData['durationInSeconds']),
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    _formatDuration(
+                                      sessionData['durationInSeconds'],
+                                    ),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ],
                               ),
                             ],
                           ),
+                        ),
+                        trailing: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minSize: 0,
+                          child: const Icon(
+                            Icons.delete,
+                            color: CupertinoColors.destructiveRed,
+                          ),
+                          onPressed: () async {
+                            // Hiển thị dialog xác nhận xóa (iOS style)
+                            final confirm = await showCupertinoDialog<bool>(
+                              context: context,
+                              builder: (BuildContext context) =>
+                                  CupertinoAlertDialog(
+                                    title: const Text('Xác nhận xóa'),
+                                    content: const Text(
+                                      'Bạn có chắc chắn muốn xóa buổi tập luyện này không?',
+                                    ),
+                                    actions: [
+                                      CupertinoDialogAction(
+                                        child: const Text('Hủy'),
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(false),
+                                      ),
+                                      CupertinoDialogAction(
+                                        isDestructiveAction: true,
+                                        child: const Text('Xóa'),
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(true),
+                                      ),
+                                    ],
+                                  ),
+                            );
+
+                            if (confirm == true && mounted) {
+                              try {
+                                final sessionId = sessions[index].id;
+                                await DatabaseService(
+                                  uid: uid,
+                                ).deleteWorkoutSession(sessionId);
+                                if (mounted) {
+                                  _showIOSNotification(
+                                    context,
+                                    'Đã xóa buổi tập luyện thành công',
+                                    isError: false,
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  _showIOSNotification(
+                                    context,
+                                    'Lỗi khi xóa: $e',
+                                    isError: true,
+                                  );
+                                }
+                              }
+                            }
+                          },
                         ),
                         onTap: () {
                           // **THAY ĐỔI Ở ĐÂY**
@@ -178,7 +306,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => WorkoutDetailScreen(session: sessions[index]),
+                              builder: (context) =>
+                                  WorkoutDetailScreen(session: sessions[index]),
                             ),
                           );
                         },
@@ -190,6 +319,45 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ],
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ChatScreen()),
+          );
+        },
+        backgroundColor: Colors.orange.shade400,
+        elevation: 8,
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [Colors.orange.shade300, Colors.orange.shade600],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.orange.withOpacity(0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/chatbot.png',
+            width: 40,
+            height: 40,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              // Fallback icon nếu không tìm thấy ảnh
+              return const Icon(Icons.smart_toy, color: Colors.white, size: 32);
+            },
+          ),
+        ),
       ),
     );
   }
