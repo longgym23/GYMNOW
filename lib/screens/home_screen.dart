@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:gym_now/screens/chat_screen.dart'; // **<-- THÊM IMPORT NÀY**
@@ -6,6 +7,7 @@ import 'package:gym_now/screens/welcome_screen.dart';
 import 'package:gym_now/services/auth_service.dart';
 import 'package:gym_now/services/database_service.dart';
 import 'package:pedometer/pedometer.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 // Bỏ import tracking_screen không cần thiết ở đây
 
 class HomeScreen extends StatefulWidget {
@@ -19,19 +21,176 @@ class _HomeScreenState extends State<HomeScreen> {
   final AuthService _auth = AuthService();
   final user = FirebaseAuth.instance.currentUser;
   late Stream<StepCount> _stepCountStream;
+  bool _pedometerAvailable = true;
+  int _stepsAtStartOfDay = 0;
+  DateTime? _lastResetDate;
 
   @override
   void initState() {
     super.initState();
     initPedometer();
+    _loadStepsAtStartOfDay();
+  }
+
+  /// Lưu số bước chân vào đầu ngày
+  Future<void> _saveStepsAtStartOfDay(int steps, DateTime date) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('steps_at_start_of_day', steps);
+    await prefs.setString('last_reset_date', date.toIso8601String());
+  }
+
+  /// Lấy số bước chân vào đầu ngày
+  Future<void> _loadStepsAtStartOfDay() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final lastResetDateStr = prefs.getString('last_reset_date');
+    if (lastResetDateStr != null) {
+      final lastResetDate = DateTime.parse(lastResetDateStr);
+      final lastResetDay = DateTime(
+        lastResetDate.year,
+        lastResetDate.month,
+        lastResetDate.day,
+      );
+
+      // Nếu đã qua ngày mới, reset số bước
+      if (lastResetDay.isBefore(today)) {
+        // Lấy số bước hiện tại và lưu làm số bước đầu ngày
+        try {
+          final stepCount = await Pedometer.stepCountStream.first;
+          _stepsAtStartOfDay = stepCount.steps;
+          _lastResetDate = today;
+          await _saveStepsAtStartOfDay(_stepsAtStartOfDay, today);
+        } catch (e) {
+          print('Lỗi lấy số bước đầu ngày: $e');
+          _stepsAtStartOfDay = 0;
+          _lastResetDate = today;
+          await _saveStepsAtStartOfDay(0, today);
+        }
+      } else {
+        // Vẫn trong cùng ngày, lấy số bước đã lưu
+        _stepsAtStartOfDay = prefs.getInt('steps_at_start_of_day') ?? 0;
+        _lastResetDate = lastResetDay;
+      }
+    } else {
+      // Lần đầu tiên, lấy số bước hiện tại
+      try {
+        final stepCount = await Pedometer.stepCountStream.first;
+        _stepsAtStartOfDay = stepCount.steps;
+        _lastResetDate = today;
+        await _saveStepsAtStartOfDay(_stepsAtStartOfDay, today);
+      } catch (e) {
+        print('Lỗi lấy số bước đầu ngày: $e');
+        _stepsAtStartOfDay = 0;
+        _lastResetDate = today;
+        await _saveStepsAtStartOfDay(0, today);
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  /// Tính số bước chân trong ngày từ Pedometer
+  int _calculateTodayStepsFromPedometer(int currentSteps) {
+    // Kiểm tra xem đã qua ngày mới chưa
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (_lastResetDate == null || _lastResetDate!.isBefore(today)) {
+      // Đã qua ngày mới, reset
+      _stepsAtStartOfDay = currentSteps;
+      _lastResetDate = today;
+      _saveStepsAtStartOfDay(_stepsAtStartOfDay, today);
+      return 0;
+    }
+
+    // Số bước trong ngày = số bước hiện tại - số bước đầu ngày
+    final todaySteps = currentSteps - _stepsAtStartOfDay;
+    return todaySteps > 0 ? todaySteps : 0;
   }
 
   void initPedometer() {
     _stepCountStream = Pedometer.stepCountStream;
-    _stepCountStream.listen((event) {}).onError((error) {
-      print('Pedometer Error: $error');
-      // Cân nhắc hiển thị lỗi cho người dùng nếu cần
-    });
+    _stepCountStream
+        .listen((event) {
+          if (mounted) {
+            setState(() {
+              _pedometerAvailable = true;
+            });
+          }
+        })
+        .onError((error) {
+          print('Pedometer Error: $error');
+          if (mounted) {
+            setState(() {
+              _pedometerAvailable = false;
+            });
+          }
+        });
+  }
+
+  /// Stream để lấy workout sessions trong ngày
+  Stream<QuerySnapshot> _getTodayWorkoutSessionsStream() {
+    if (user == null) return const Stream.empty();
+
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+
+    // Lấy tất cả sessions từ đầu ngày đến giờ, sau đó filter trong code
+    return FirebaseFirestore.instance
+        .collection('workouts')
+        .doc(user!.uid)
+        .collection('sessions')
+        .where(
+          'startTime',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+        )
+        .orderBy('startTime', descending: true)
+        .snapshots();
+  }
+
+  /// Tính số bước chân từ quãng đường GPS
+  /// Công thức: 1 bước chân trung bình = 0.7 mét (có thể điều chỉnh theo chiều cao)
+  int _calculateStepsFromGPS(
+    List<QueryDocumentSnapshot> sessions,
+    double userHeight,
+  ) {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    double totalDistanceMeters = 0.0;
+    for (var doc in sessions) {
+      final data = doc.data() as Map<String, dynamic>;
+      final startTime = (data['startTime'] as Timestamp?)?.toDate();
+
+      // Filter chỉ lấy sessions trong ngày hôm nay
+      if (startTime != null) {
+        final isToday =
+            startTime.isAtSameMomentAs(startOfDay) ||
+            (startTime.isAfter(startOfDay) && startTime.isBefore(endOfDay));
+        if (isToday) {
+          final distance =
+              (data['distanceInMeters'] as num?)?.toDouble() ?? 0.0;
+          totalDistanceMeters += distance;
+        }
+      }
+    }
+
+    // Tính stride length (chiều dài bước chân) dựa trên chiều cao
+    // Công thức: stride length (m) = height (cm) * 0.415 / 100
+    // Hoặc dùng giá trị trung bình 0.7m nếu không có chiều cao
+    double strideLengthMeters = 0.7; // Mặc định
+    if (userHeight > 0) {
+      strideLengthMeters = (userHeight * 0.415) / 100;
+    }
+
+    // Tính số bước chân: quãng đường / chiều dài bước chân
+    final stepsFromGPS = (totalDistanceMeters / strideLengthMeters).round();
+    return stepsFromGPS;
   }
 
   @override
@@ -87,52 +246,208 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 30),
-                  // Card đếm bước chân
+                  // Card đếm bước chân với circular progress
                   Card(
                     color: const Color(0xFF1B263B),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.directions_walk,
-                            size: 40,
-                            color: Theme.of(context).colorScheme.secondary,
-                          ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Số bước chân hôm nay',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                                StreamBuilder<StepCount>(
-                                  stream: _stepCountStream,
-                                  builder: (context, snapshot) {
-                                    int steps = snapshot.hasData
-                                        ? snapshot.data!.steps
-                                        : 0;
-                                    return Text(
-                                      '$steps',
-                                      style: const TextStyle(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                      padding: const EdgeInsets.all(24.0),
+                      child: StreamBuilder<StepCount>(
+                        stream: _stepCountStream,
+                        builder: (context, pedometerSnapshot) {
+                          return FutureBuilder<DocumentSnapshot>(
+                            future: DatabaseService(
+                              uid: user!.uid,
+                            ).getUserData(),
+                            builder: (context, userSnapshot) {
+                              // Lấy chiều cao user
+                              double userHeight = 0.0;
+                              if (userSnapshot.hasData &&
+                                  userSnapshot.data!.exists) {
+                                final userData =
+                                    userSnapshot.data!.data()
+                                        as Map<String, dynamic>;
+                                userHeight =
+                                    (userData['height'] as num?)?.toDouble() ??
+                                    0.0;
+                              }
+
+                              return StreamBuilder<QuerySnapshot>(
+                                stream: _getTodayWorkoutSessionsStream(),
+                                builder: (context, gpsSnapshot) {
+                                  // Tính số bước trong ngày từ pedometer (nếu có)
+                                  int pedometerTodaySteps = 0;
+                                  if (_pedometerAvailable &&
+                                      pedometerSnapshot.hasData) {
+                                    pedometerTodaySteps =
+                                        _calculateTodayStepsFromPedometer(
+                                          pedometerSnapshot.data!.steps,
+                                        );
+                                  }
+
+                                  // Tính số bước từ GPS
+                                  int gpsSteps = 0;
+                                  if (gpsSnapshot.hasData) {
+                                    gpsSteps = _calculateStepsFromGPS(
+                                      gpsSnapshot.data!.docs,
+                                      userHeight,
                                     );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                                  }
+
+                                  // Kết hợp: Ưu tiên pedometer nếu có (tính tất cả bước chân trong ngày)
+                                  // Nếu không có pedometer, dùng GPS từ workout sessions
+                                  // Nếu có cả hai, có thể cộng thêm GPS steps (nhưng thường pedometer đã bao gồm)
+                                  int totalSteps =
+                                      _pedometerAvailable &&
+                                          pedometerTodaySteps > 0
+                                      ? pedometerTodaySteps
+                                      : gpsSteps;
+
+                                  // Nếu có cả pedometer và GPS, và GPS > pedometer (có thể do workout không được tính trong pedometer)
+                                  // Thì lấy giá trị lớn hơn hoặc cộng thêm phần chênh lệch
+                                  if (_pedometerAvailable &&
+                                      pedometerTodaySteps > 0 &&
+                                      gpsSteps > pedometerTodaySteps) {
+                                    // Có thể workout sessions có thêm bước chân mà pedometer chưa tính
+                                    // Hoặc đơn giản lấy giá trị lớn hơn
+                                    totalSteps = gpsSteps;
+                                  }
+
+                                  // Mục tiêu mặc định 10000 bước
+                                  const int goalSteps = 10000;
+                                  double progress = totalSteps / goalSteps;
+                                  if (progress > 1.0) progress = 1.0;
+
+                                  return Column(
+                                    children: [
+                                      Row(
+                                        children: [
+                                          // Phần text bên trái
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      'Số bước chân hôm nay',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        color: Colors.grey[400],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    // Icon hiển thị nguồn dữ liệu
+                                                    Icon(
+                                                      _pedometerAvailable &&
+                                                              pedometerTodaySteps >
+                                                                  0
+                                                          ? Icons.sensors
+                                                          : Icons.location_on,
+                                                      size: 16,
+                                                      color: Colors.grey[500],
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  totalSteps
+                                                      .toString()
+                                                      .replaceAllMapped(
+                                                        RegExp(
+                                                          r'(\d{1,3})(?=(\d{3})+(?!\d))',
+                                                        ),
+                                                        (Match m) => '${m[1]},',
+                                                      ),
+                                                  style: const TextStyle(
+                                                    fontSize: 32,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                                // Hiển thị thông tin nguồn
+                                                if (gpsSteps > 0 &&
+                                                    _pedometerAvailable &&
+                                                    pedometerTodaySteps > 0)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 4,
+                                                        ),
+                                                    child: Text(
+                                                      'Từ workout: ${gpsSteps.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} bước',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.grey[500],
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 20),
+                                          // Circular progress bar bên phải
+                                          Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              SizedBox(
+                                                width: 100,
+                                                height: 100,
+                                                child: CircularProgressIndicator(
+                                                  value: progress,
+                                                  strokeWidth: 10,
+                                                  backgroundColor:
+                                                      Colors.grey[800],
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(Colors.orange),
+                                                ),
+                                              ),
+                                              // Icon người chạy ở giữa
+                                              Icon(
+                                                Icons.directions_run,
+                                                size: 40,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.secondary,
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      // Progress text
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            '${(progress * 100).toStringAsFixed(0)}% hoàn thành',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[400],
+                                            ),
+                                          ),
+                                          Text(
+                                            'Mục tiêu: ${goalSteps.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} bước',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[400],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -159,30 +474,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-
-                  // **NÚT MỚI ĐỂ MỞ CHATBOT**
-                  const SizedBox(height: 20), // Thêm khoảng cách
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      label: const Text('Hỏi PT AI'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.secondary, // Màu xanh dương
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
                 ],
               ),
             );
@@ -200,13 +491,14 @@ class _HomeScreenState extends State<HomeScreen> {
             MaterialPageRoute(builder: (context) => const ChatScreen()),
           );
         },
-        backgroundColor: Colors.orange.shade400,
+        backgroundColor: Colors.transparent,
         elevation: 8,
+        shape: const CircleBorder(), // Bo góc tròn hoàn toàn
         child: Container(
           width: 60,
           height: 60,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            shape: BoxShape.circle, // Đảm bảo tròn hoàn toàn
             gradient: LinearGradient(
               colors: [Colors.orange.shade300, Colors.orange.shade600],
               begin: Alignment.topLeft,

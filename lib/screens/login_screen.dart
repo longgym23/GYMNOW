@@ -3,6 +3,7 @@ import 'package:gym_now/screens/main_navigator.dart';
 import 'package:gym_now/widgets/wave_clipper.dart';
 import 'package:gym_now/services/auth_service.dart';
 import 'package:gym_now/screens/register_screen.dart';
+import 'package:gym_now/screens/forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -42,15 +43,31 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30.0),
+              padding: EdgeInsets.only(
+                left: 30.0,
+                right: 30.0,
+                top: MediaQuery.of(context).padding.top + 20,
+              ),
               child: Column(
                 children: [
-                  SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                  // Logo scroll cùng với nội dung
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      height: 50,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.1),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'Đăng nhập',
-                      style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 50),
@@ -62,7 +79,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           style: const TextStyle(color: Colors.white),
                           decoration: const InputDecoration(labelText: 'Email'),
-                          validator: (val) => val!.isEmpty ? 'Nhập email của bạn' : null,
+                          validator: (val) =>
+                              val!.isEmpty ? 'Nhập email của bạn' : null,
                           onChanged: (val) => setState(() => email = val),
                         ),
                         const SizedBox(height: 20.0),
@@ -71,19 +89,34 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Password',
                             suffixIcon: IconButton(
-                              icon: Icon(_obscureText ? Icons.visibility_off : Icons.visibility),
-                              onPressed: () => setState(() => _obscureText = !_obscureText),
+                              icon: Icon(
+                                _obscureText
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _obscureText = !_obscureText),
                             ),
                           ),
                           obscureText: _obscureText,
-                          validator: (val) => val!.length < 6 ? 'Mật khẩu phải dài hơn 6 ký tự' : null,
+                          validator: (val) => val!.length < 6
+                              ? 'Mật khẩu phải dài hơn 6 ký tự'
+                              : null,
                           onChanged: (val) => setState(() => password = val),
                         ),
                         const SizedBox(height: 10),
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const ForgotPasswordScreen(),
+                                ),
+                              );
+                            },
                             child: Text(
                               'Quên mật khẩu?',
                               style: TextStyle(color: Colors.grey[400]),
@@ -95,59 +128,95 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: double.infinity,
                           child: ElevatedButton(
                             child: _isLoading
-                                ? const CircularProgressIndicator(color: Colors.white)
-                                : const Text('Đăng nhập', style: TextStyle(fontSize: 18)),
-                            onPressed: _isLoading ? null : () async {
-                              if (_formKey.currentState!.validate()) {
-                                setState(() => _isLoading = true);
-                                dynamic result = await _auth.signInWithEmailAndPassword(email, password);
-                                
-                                // Dừng loading sau khi có kết quả
-                                if(mounted) {
-                                  setState(() => _isLoading = false);
-                                }
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white,
+                                  )
+                                : const Text(
+                                    'Đăng nhập',
+                                    style: TextStyle(fontSize: 18),
+                                  ),
+                            onPressed: _isLoading
+                                ? null
+                                : () async {
+                                    if (_formKey.currentState!.validate()) {
+                                      setState(() => _isLoading = true);
+                                      dynamic result = await _auth
+                                          .signInWithEmailAndPassword(
+                                            email,
+                                            password,
+                                          );
 
-                                if (result == null) {
-                                  setState(() => error = 'Email hoặc mật khẩu không đúng');
-                                } else {
-                                  // **SỬA ĐỔI SNACKBAR Ở ĐÂY**
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: const Text(
-                                        'Đăng nhập thành công!',
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      backgroundColor: Colors.green,
-                                      behavior: SnackBarBehavior.floating,
-                                      margin: const EdgeInsets.only(bottom: 50, left: 20, right: 20),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(24.0),
-                                      ),
-                                      duration: const Duration(seconds: 1),
-                                    ),
-                                  );
-                                  
-                                  await Future.delayed(const Duration(milliseconds: 1200));
+                                      // Dừng loading sau khi có kết quả
+                                      if (mounted) {
+                                        setState(() => _isLoading = false);
+                                      }
 
-                                  if (mounted) {
-                                    Navigator.pushAndRemoveUntil(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const MainNavigator()),
-                                      (route) => false,
-                                    );
-                                  }
-                                }
-                              }
-                            },
+                                      if (result == null) {
+                                        setState(
+                                          () => error =
+                                              'Email hoặc mật khẩu không đúng',
+                                        );
+                                      } else {
+                                        // **SỬA ĐỔI SNACKBAR Ở ĐÂY**
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: const Text(
+                                              'Đăng nhập thành công!',
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            backgroundColor: Colors.green,
+                                            behavior: SnackBarBehavior.floating,
+                                            margin: const EdgeInsets.only(
+                                              bottom: 50,
+                                              left: 20,
+                                              right: 20,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(24.0),
+                                            ),
+                                            duration: const Duration(
+                                              seconds: 1,
+                                            ),
+                                          ),
+                                        );
+
+                                        await Future.delayed(
+                                          const Duration(milliseconds: 1200),
+                                        );
+
+                                        if (mounted) {
+                                          Navigator.pushAndRemoveUntil(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const MainNavigator(),
+                                            ),
+                                            (route) => false,
+                                          );
+                                        }
+                                      }
+                                    }
+                                  },
                           ),
                         ),
                         const SizedBox(height: 20),
-                        Text(error, style: const TextStyle(color: Colors.red, fontSize: 14.0)),
+                        Text(
+                          error,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 14.0,
+                          ),
+                        ),
                         TextButton(
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                              MaterialPageRoute(
+                                builder: (context) => const RegisterScreen(),
+                              ),
                             );
                           },
                           child: Text.rich(
@@ -158,7 +227,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 TextSpan(
                                   text: "Đăng ký",
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.secondary,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.secondary,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -172,11 +243,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
             ),
-          ),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 20,
-            left: 20,
-            child: Image.asset('assets/images/logo.jpg', height: 50),
           ),
         ],
       ),

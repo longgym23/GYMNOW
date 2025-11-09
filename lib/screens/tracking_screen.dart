@@ -690,12 +690,34 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   double _getAdjustedMET(double avgSpeedKmh) {
     if (avgSpeedKmh < 1.5) return 1.0;
+
+    // Điều chỉnh MET cho Đi bộ
     if (widget.activityType.name == 'Đi bộ' ||
         (widget.activityType.name == 'Chạy bộ' && avgSpeedKmh < 5))
       return 3.5;
+
+    // Điều chỉnh MET cho Đạp xe
     if (widget.activityType.name == 'Đạp xe' && avgSpeedKmh < 15) return 6.0;
-    // Thêm các điều kiện khác nếu cần
-    return widget.activityType.metValue; // Mặc định trả về MET gốc
+
+    // Điều chỉnh MET cho Leo núi dựa trên tốc độ
+    // Leo núi thường chậm hơn đi bộ bình thường do độ dốc
+    // Tốc độ chậm (< 3 km/h) = leo núi khó (MET cao hơn)
+    // Tốc độ trung bình (3-5 km/h) = leo núi nhẹ (MET trung bình)
+    if (widget.activityType.name == 'Leo núi') {
+      if (avgSpeedKmh < 3.0) {
+        // Leo núi khó, tốc độ rất chậm -> MET cao hơn (10-12)
+        return 10.0;
+      } else if (avgSpeedKmh < 5.0) {
+        // Leo núi trung bình -> MET 8-9
+        return 8.5;
+      } else {
+        // Leo núi nhẹ hoặc đi xuống -> MET cơ bản
+        return widget.activityType.metValue;
+      }
+    }
+
+    // Mặc định trả về MET gốc
+    return widget.activityType.metValue;
   }
 
   @override

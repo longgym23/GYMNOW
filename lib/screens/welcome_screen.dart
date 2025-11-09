@@ -21,14 +21,16 @@ class WelcomeScreen extends StatelessWidget {
             clipper: WaveClipperBottom(),
             child: Container(
               height: MediaQuery.of(context).size.height,
-              color: Theme.of(context).scaffoldBackgroundColor, // Lấy màu nền từ theme
+              color: Theme.of(
+                context,
+              ).scaffoldBackgroundColor, // Lấy màu nền từ theme
             ),
           ),
           Positioned(
             top: MediaQuery.of(context).padding.top + 20,
             left: 20,
             child: Image.asset(
-              'assets/images/logo.jpg', // **ĐÃ THAY ĐỔI**
+              'assets/images/logo.png', // **ĐÃ THAY ĐỔI**
               height: 50,
             ),
           ),
@@ -41,20 +43,14 @@ class WelcomeScreen extends StatelessWidget {
                   padding: EdgeInsets.only(left: 30.0, bottom: 10),
                   child: Text(
                     'Welcome',
-                    style: TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(left: 30.0, bottom: 50),
                   child: Text(
                     'Bắt đầu hành trình sức khỏe của bạn.\nCùng nhau đạt được mục tiêu.',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[400],
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.grey[400]),
                   ),
                 ),
                 Padding(
@@ -63,13 +59,20 @@ class WelcomeScreen extends StatelessWidget {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const LoginScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
                       );
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 25,
+                        vertical: 15,
+                      ),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary, // Lấy màu cam
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary, // Lấy màu cam
                         borderRadius: BorderRadius.circular(30),
                       ),
                       child: Row(
@@ -83,10 +86,7 @@ class WelcomeScreen extends StatelessWidget {
                             ),
                           ),
                           SizedBox(width: 10),
-                          Icon(
-                            Icons.arrow_forward_ios,
-                            size: 18,
-                          ),
+                          Icon(Icons.arrow_forward_ios, size: 18),
                         ],
                       ),
                     ),

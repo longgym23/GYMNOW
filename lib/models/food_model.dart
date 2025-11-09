@@ -11,6 +11,7 @@ class FoodItem {
   final double fiber;
   final String unit;
   final String imageUrl;
+  final String description; // Mô tả về món ăn
 
   FoodItem({
     required this.id,
@@ -22,6 +23,7 @@ class FoodItem {
     required this.fiber,
     required this.unit,
     this.imageUrl = '',
+    this.description = '',
   });
 
   // Factory để chuyển đổi từ Firestore Document sang Object
@@ -37,6 +39,7 @@ class FoodItem {
       fiber: (data['fiber'] ?? 0.0).toDouble(),
       unit: data['unit'] ?? '',
       imageUrl: data['imageUrl'] ?? '',
+      description: data['description'] ?? '',
     );
   }
 }
