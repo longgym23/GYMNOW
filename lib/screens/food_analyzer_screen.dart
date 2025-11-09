@@ -208,19 +208,72 @@ class _FoodAnalyzerScreenState extends State<FoodAnalyzerScreen> {
             ),
             const SizedBox(height: 16),
             if (_result != null) ...[
-              Center(
-                child: SizedBox(
-                  height: 200,
-                  child: PieChart(
-                    PieChartData(
-                      sections: _sections(),
-                      centerSpaceRadius: 42,
-                      sectionsSpace: 2,
+              // Biểu đồ tròn và thông tin dinh dưỡng bên cạnh
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Biểu đồ tròn
+                  SizedBox(
+                    height: 200,
+                    width: 200,
+                    child: PieChart(
+                      PieChartData(
+                        sections: _sections(),
+                        centerSpaceRadius: 42,
+                        sectionsSpace: 2,
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 20),
+                  // Thông tin dinh dưỡng bên cạnh
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Dinh dưỡng chính',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_result!.containsKey('calories'))
+                          _buildNutritionItem(
+                            'Calo',
+                            '${_result!['calories']} kcal',
+                            Colors.orange,
+                          ),
+                        if (_result!.containsKey('protein'))
+                          _buildNutritionItem(
+                            'Protein',
+                            '${_result!['protein']} g',
+                            Colors.purple,
+                          ),
+                        if (_result!.containsKey('carbs'))
+                          _buildNutritionItem(
+                            'Carb',
+                            '${_result!['carbs']} g',
+                            Colors.blue,
+                          ),
+                        if (_result!.containsKey('fat'))
+                          _buildNutritionItem(
+                            'Fat',
+                            '${_result!['fat']} g',
+                            Colors.amber,
+                          ),
+                        if (_result!.containsKey('fiber'))
+                          _buildNutritionItem(
+                            'Chất xơ',
+                            '${_result!['fiber']} g',
+                            Colors.green,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 20),
               // Thông tin cơ bản
               _infoRow('Món ăn', (_result!['dishName'] ?? '').toString()),
               if ((_result!['brand'] ?? '').toString().isNotEmpty)
@@ -242,22 +295,6 @@ class _FoodAnalyzerScreenState extends State<FoodAnalyzerScreen> {
                 ),
               _infoRow('Khẩu phần', (_result!['servingUnit'] ?? '').toString()),
               const Divider(height: 24),
-              // Dinh dưỡng chính
-              const Text(
-                'Dinh dưỡng chính',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              if (_result!.containsKey('calories'))
-                _infoRow('Calo', '${_result!['calories']} kcal'),
-              if (_result!.containsKey('protein'))
-                _infoRow('Protein', '${_result!['protein']} g'),
-              if (_result!.containsKey('carbs'))
-                _infoRow('Carb', '${_result!['carbs']} g'),
-              if (_result!.containsKey('fat'))
-                _infoRow('Fat', '${_result!['fat']} g'),
-              if (_result!.containsKey('fiber'))
-                _infoRow('Chất xơ', '${_result!['fiber']} g'),
               // Dinh dưỡng bổ sung (nếu có)
               if (_result!.containsKey('sugar') ||
                   _result!.containsKey('sodium') ||
@@ -336,6 +373,38 @@ class _FoodAnalyzerScreenState extends State<FoodAnalyzerScreen> {
         children: [
           Text(label),
           Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNutritionItem(String label, String value, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B263B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(fontSize: 14)),
+            ],
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );

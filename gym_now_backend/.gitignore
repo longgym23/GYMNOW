@@ -1,5 +1,6 @@
 # Tệp khóa Firebase Admin - TUYỆT ĐỐI KHÔNG ĐƯA LÊN GIT
 serviceAccountKey.json
-
+BUILD_GUIDE.md
+README_EMAIL_SETUP.md
 # Thư mục chứa các thư viện đã cài đặt
 node_modules/

@@ -5,7 +5,9 @@ final List<WorkoutType> defaultWorkoutTypes = [
   const WorkoutType(name: 'Chạy bộ', icon: Icons.directions_run, metValue: 7.0),
   const WorkoutType(name: 'Đi bộ', icon: Icons.directions_walk, metValue: 3.5),
   const WorkoutType(name: 'Đạp xe', icon: Icons.directions_bike, metValue: 8.0),
-  const WorkoutType(name: 'Leo núi', icon: Icons.hiking, metValue: 6.0),
+  // Leo núi: MET 8.0 cho leo núi nhẹ, có thể điều chỉnh dựa trên tốc độ
+  // Leo núi khó (tốc độ chậm < 3 km/h) có thể lên đến MET 10-12
+  const WorkoutType(name: 'Leo núi', icon: Icons.hiking, metValue: 8.0),
   // Bạn có thể thêm các chế độ khác ở đây, ví dụ như Bơi lội.
   // Lưu ý: Bơi lội sẽ không dùng GPS để vẽ đường đi.
 ];
