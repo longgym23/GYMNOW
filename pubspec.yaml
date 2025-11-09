@@ -57,6 +57,8 @@ dependencies:
   flutter_chat_ui: ^1.6.9 # Hoặc phiên bản mới nhất
   speech_to_text: ^7.3.0
   image_picker: ^1.0.7
+  connectivity_plus: ^6.0.5
+  internet_connection_checker: ^1.0.0+1
 dev_dependencies:
   flutter_test:
     sdk: flutter

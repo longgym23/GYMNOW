@@ -3,8 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:gym_now/screens/chat_screen.dart'; // **<-- THÊM IMPORT NÀY**
 import 'package:gym_now/screens/select_activity_screen.dart';
-import 'package:gym_now/screens/welcome_screen.dart';
-import 'package:gym_now/services/auth_service.dart';
 import 'package:gym_now/services/database_service.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +16,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final AuthService _auth = AuthService();
   final user = FirebaseAuth.instance.currentUser;
   late Stream<StepCount> _stepCountStream;
   bool _pedometerAvailable = true;
@@ -199,21 +196,6 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Trang chủ'),
         automaticallyImplyLeading: false, // Ẩn nút back
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Đăng xuất',
-            onPressed: () async {
-              await _auth.signOut();
-              // Đảm bảo quay về màn hình welcome sau khi đăng xuất
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-                (route) => false,
-              );
-            },
-          ),
-        ],
       ),
       body: FutureBuilder(
         future: DatabaseService(uid: user!.uid).getUserData(),

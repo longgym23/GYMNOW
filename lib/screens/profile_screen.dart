@@ -1,9 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:gym_now/models/user_model.dart'; // Thêm import này
 import 'package:gym_now/screens/admin_panel_screen.dart';
 import 'package:gym_now/screens/edit_user_screen.dart';
 import 'package:gym_now/screens/heart_rate_screen.dart';
+import 'package:gym_now/screens/welcome_screen.dart';
+import 'package:gym_now/services/auth_service.dart';
 import 'package:gym_now/services/database_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -14,6 +17,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final user = FirebaseAuth.instance.currentUser;
+  final AuthService _auth = AuthService();
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +142,107 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                   },
                 ),
+              const SizedBox(height: 10),
+              // Nút đăng xuất hiện đại
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: LinearGradient(
+                    colors: [Colors.red.shade400, Colors.red.shade600],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      // Hiển thị dialog xác nhận kiểu iOS
+                      final confirm = await showCupertinoDialog<bool>(
+                        context: context,
+                        builder: (context) => CupertinoAlertDialog(
+                          title: const Text('Xác nhận đăng xuất'),
+                          content: const Text(
+                            'Bạn có chắc chắn muốn đăng xuất?',
+                          ),
+                          actions: [
+                            CupertinoDialogAction(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text(
+                                'Hủy',
+                                style: TextStyle(
+                                  color: CupertinoColors.activeBlue,
+                                ),
+                              ),
+                            ),
+                            CupertinoDialogAction(
+                              isDestructiveAction: true,
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text('Đăng xuất'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirm == true) {
+                        await _auth.signOut();
+                        if (mounted) {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const WelcomeScreen(),
+                            ),
+                            (route) => false,
+                          );
+                        }
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 24,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.logout,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Đăng xuất',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
           );
         },

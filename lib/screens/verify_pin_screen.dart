@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gym_now/services/pin_service.dart';
 import 'package:gym_now/screens/reset_password_screen.dart';
 import 'package:gym_now/widgets/wave_clipper.dart';
@@ -94,13 +95,39 @@ class _VerifyPinScreenState extends State<VerifyPinScreen> {
         }
       } else {
         setState(() {
-          _error = result['message'] as String;
+          // Hiển thị thông báo lỗi rõ ràng hơn
+          final errorMessage = result['message'] as String;
+          if (errorMessage.contains('không đúng') ||
+              errorMessage.contains('sai')) {
+            _error = 'Mã PIN không đúng. Vui lòng nhập lại.';
+          } else {
+            _error = errorMessage;
+          }
           // Xóa mã PIN đã nhập
           for (var controller in _pinControllers) {
             controller.clear();
           }
           _focusNodes[0].requestFocus();
         });
+
+        // Hiển thị SnackBar để người dùng dễ nhận thấy
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _error.isNotEmpty
+                  ? _error
+                  : 'Mã PIN không đúng. Vui lòng nhập lại.',
+              textAlign: TextAlign.center,
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 50, left: 20, right: 20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24.0),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
@@ -120,9 +147,18 @@ class _VerifyPinScreenState extends State<VerifyPinScreen> {
 
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mã PIN mới đã được gửi đến email của bạn'),
+          SnackBar(
+            content: const Text(
+              'Mã PIN đã được gửi đến email của bạn',
+              textAlign: TextAlign.center,
+            ),
             backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 50, left: 20, right: 20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24.0),
+            ),
+            duration: const Duration(seconds: 1),
           ),
         );
         // Xóa mã PIN đã nhập
@@ -210,12 +246,15 @@ class _VerifyPinScreenState extends State<VerifyPinScreen> {
                           textAlign: TextAlign.center,
                           keyboardType: TextInputType.number,
                           maxLength: 1,
-                          obscureText: true, // Hiển thị dấu * khi nhập
-                          obscuringCharacter:
-                              '*', // Sử dụng dấu * thay vì dấu chấm
+                          obscureText: false, // Hiển thị số thay vì dấu *
+                          inputFormatters: [
+                            FilteringTextInputFormatter
+                                .digitsOnly, // Chỉ cho phép nhập số
+                          ],
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
+                            color: Colors.black87,
                           ),
                           decoration: InputDecoration(
                             counterText: '',
