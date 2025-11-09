@@ -203,7 +203,7 @@ class _CustomizeMealPlanScreenState extends State<CustomizeMealPlanScreen> {
                                       foodsStream = FirebaseFirestore.instance
                                           .collection('foods')
                                           .orderBy('name')
-                                          .limit(50)
+                                          .limit(200)
                                           .snapshots();
                                     });
                                   },
@@ -222,21 +222,12 @@ class _CustomizeMealPlanScreenState extends State<CustomizeMealPlanScreen> {
                         onChanged: (value) {
                           setDialogState(() {
                             searchQuery = value.toLowerCase();
-                            if (searchQuery.isEmpty) {
-                              foodsStream = FirebaseFirestore.instance
-                                  .collection('foods')
-                                  .orderBy('name')
-                                  .limit(50)
-                                  .snapshots();
-                            } else {
-                              foodsStream = FirebaseFirestore.instance
-                                  .collection('foods')
-                                  .orderBy('searchName')
-                                  .startAt([searchQuery])
-                                  .endAt(['${searchQuery}\uf8ff'])
-                                  .limit(50)
-                                  .snapshots();
-                            }
+                            // Lấy tất cả foods và filter ở client-side
+                            foodsStream = FirebaseFirestore.instance
+                                .collection('foods')
+                                .orderBy('name')
+                                .limit(200)
+                                .snapshots();
                           });
                         },
                       ),
@@ -293,12 +284,153 @@ class _CustomizeMealPlanScreenState extends State<CustomizeMealPlanScreen> {
                             ),
                           );
                         }
+
+                        // Helper functions để remove diacritics và match search
+                        String removeDiacritics(String str) {
+                          const Map<String, String> diacriticsMap = {
+                            'à': 'a',
+                            'á': 'a',
+                            'ạ': 'a',
+                            'ả': 'a',
+                            'ã': 'a',
+                            'â': 'a',
+                            'ầ': 'a',
+                            'ấ': 'a',
+                            'ậ': 'a',
+                            'ẩ': 'a',
+                            'ẫ': 'a',
+                            'ă': 'a',
+                            'ằ': 'a',
+                            'ắ': 'a',
+                            'ặ': 'a',
+                            'ẳ': 'a',
+                            'ẵ': 'a',
+                            'è': 'e',
+                            'é': 'e',
+                            'ẹ': 'e',
+                            'ẻ': 'e',
+                            'ẽ': 'e',
+                            'ê': 'e',
+                            'ề': 'e',
+                            'ế': 'e',
+                            'ệ': 'e',
+                            'ể': 'e',
+                            'ễ': 'e',
+                            'ì': 'i',
+                            'í': 'i',
+                            'ị': 'i',
+                            'ỉ': 'i',
+                            'ĩ': 'i',
+                            'ò': 'o',
+                            'ó': 'o',
+                            'ọ': 'o',
+                            'ỏ': 'o',
+                            'õ': 'o',
+                            'ô': 'o',
+                            'ồ': 'o',
+                            'ố': 'o',
+                            'ộ': 'o',
+                            'ổ': 'o',
+                            'ỗ': 'o',
+                            'ơ': 'o',
+                            'ờ': 'o',
+                            'ớ': 'o',
+                            'ợ': 'o',
+                            'ở': 'o',
+                            'ỡ': 'o',
+                            'ù': 'u',
+                            'ú': 'u',
+                            'ụ': 'u',
+                            'ủ': 'u',
+                            'ũ': 'u',
+                            'ư': 'u',
+                            'ừ': 'u',
+                            'ứ': 'u',
+                            'ự': 'u',
+                            'ử': 'u',
+                            'ữ': 'u',
+                            'ỳ': 'y',
+                            'ý': 'y',
+                            'ỵ': 'y',
+                            'ỷ': 'y',
+                            'ỹ': 'y',
+                            'đ': 'd',
+                          };
+
+                          String result = str.toLowerCase();
+                          diacriticsMap.forEach((vietnamese, english) {
+                            result = result.replaceAll(vietnamese, english);
+                          });
+                          return result;
+                        }
+
+                        bool matchesSearch(String foodName, String query) {
+                          final normalizedFood = removeDiacritics(foodName);
+                          final normalizedQuery = removeDiacritics(query);
+                          if (normalizedFood.contains(normalizedQuery)) {
+                            return true;
+                          }
+                          final words = normalizedFood.split(' ');
+                          final firstLetters = words
+                              .map((w) => w.isNotEmpty ? w[0] : '')
+                              .join('');
+                          if (firstLetters.contains(normalizedQuery)) {
+                            return true;
+                          }
+                          return false;
+                        }
+
+                        final foodDocs = snapshot.data!.docs;
+                        final filteredDocs = searchQuery.isNotEmpty
+                            ? foodDocs.where((doc) {
+                                final food = FoodItem.fromFirestore(doc);
+                                return matchesSearch(food.name, searchQuery);
+                              }).toList()
+                            : foodDocs;
+
+                        if (filteredDocs.isEmpty && searchQuery.isNotEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2A3B4F),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.restaurant_menu,
+                                    size: 48,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  'Không tìm thấy món ăn',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
                         return ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: snapshot.data!.docs.length,
+                          itemCount: filteredDocs.length,
                           itemBuilder: (context, index) {
                             final food = FoodItem.fromFirestore(
-                              snapshot.data!.docs[index],
+                              filteredDocs[index],
                             );
                             return Container(
                               margin: const EdgeInsets.only(bottom: 12),

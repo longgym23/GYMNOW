@@ -19,6 +19,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   late TextEditingController _nameController;
   late TextEditingController _heightController;
   late TextEditingController _weightController;
+  late TextEditingController _ageController;
   late String _selectedRole;
 
   // **BIẾN MỚI: Lưu vai trò của người đang đăng nhập**
@@ -29,8 +30,13 @@ class _EditUserScreenState extends State<EditUserScreen> {
     super.initState();
     // Khởi tạo các controller với dữ liệu hiện tại của người dùng
     _nameController = TextEditingController(text: widget.user.name);
-    _heightController = TextEditingController(text: widget.user.height.toString());
-    _weightController = TextEditingController(text: widget.user.weight.toString());
+    _heightController = TextEditingController(
+      text: widget.user.height.toString(),
+    );
+    _weightController = TextEditingController(
+      text: widget.user.weight.toString(),
+    );
+    _ageController = TextEditingController(text: widget.user.age.toString());
     _selectedRole = widget.user.role;
 
     // Lấy vai trò của người dùng hiện tại để quyết định có hiển thị ô vai trò không
@@ -41,10 +47,13 @@ class _EditUserScreenState extends State<EditUserScreen> {
   Future<void> _getCurrentUserRole() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      final userData = await DatabaseService(uid: currentUser.uid).getUserData();
+      final userData = await DatabaseService(
+        uid: currentUser.uid,
+      ).getUserData();
       if (userData.exists && mounted) {
         setState(() {
-          _currentUserRole = (userData.data() as Map<String, dynamic>)['role'] ?? 'member';
+          _currentUserRole =
+              (userData.data() as Map<String, dynamic>)['role'] ?? 'member';
         });
       }
     }
@@ -56,15 +65,14 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _nameController.dispose();
     _heightController.dispose();
     _weightController.dispose();
+    _ageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Sửa hồ sơ: ${widget.user.name}'),
-      ),
+      appBar: AppBar(title: Text('Sửa hồ sơ: ${widget.user.name}')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -89,7 +97,20 @@ class _EditUserScreenState extends State<EditUserScreen> {
               keyboardType: TextInputType.number,
               validator: (val) => val!.isEmpty ? 'Không được để trống' : null,
             ),
-            
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _ageController,
+              decoration: const InputDecoration(labelText: 'Tuổi'),
+              keyboardType: TextInputType.number,
+              validator: (val) {
+                if (val!.isEmpty) return 'Không được để trống';
+                final ageValue = int.tryParse(val);
+                if (ageValue == null || ageValue <= 0 || ageValue > 120)
+                  return 'Tuổi không hợp lệ (1-120)';
+                return null;
+              },
+            ),
+
             // **THAY ĐỔI Ở ĐÂY: CHỈ HIỂN THỊ DROPDOWN CHO ADMIN**
             if (_currentUserRole == 'admin') ...[
               const SizedBox(height: 20),
@@ -120,12 +141,29 @@ class _EditUserScreenState extends State<EditUserScreen> {
                     widget.user.email, // Email không cho sửa
                     double.parse(_heightController.text),
                     double.parse(_weightController.text),
+                    int.parse(_ageController.text),
                     _selectedRole, // Member sẽ tự lưu lại role 'member' của mình
                   );
 
                   // Hiển thị thông báo thành công và quay lại
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Cập nhật thành công!')),
+                    SnackBar(
+                      content: const Text(
+                        'Cập nhật thành công!',
+                        textAlign: TextAlign.center,
+                      ),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                      margin: const EdgeInsets.only(
+                        bottom: 50,
+                        left: 20,
+                        right: 20,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24.0),
+                      ),
+                      duration: const Duration(seconds: 1),
+                    ),
                   );
                   Navigator.pop(context);
                 }

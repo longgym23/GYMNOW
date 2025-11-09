@@ -35,7 +35,19 @@ class _MealPlanDetailScreenState extends State<MealPlanDetailScreen> {
         _customizedMeals = customizedMeals;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã lưu thực đơn tùy chỉnh')),
+        SnackBar(
+          content: const Text(
+            'Đã lưu thực đơn tùy chỉnh',
+            textAlign: TextAlign.center,
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 50, left: 20, right: 20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24.0),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -264,7 +276,15 @@ class _MealPlanDetailScreenState extends State<MealPlanDetailScreen> {
       SnackBar(
         content: Text(
           'Đã bắt đầu thực đơn "${widget.template.name}" trong $_selectedDuration ngày',
+          textAlign: TextAlign.center,
         ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 50, left: 20, right: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24.0),
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -475,17 +495,29 @@ class _MealPlanDetailScreenState extends State<MealPlanDetailScreen> {
                   // Action buttons
                   Row(
                     children: [
-                      Expanded(
+                      Flexible(
+                        flex: 1,
                         child: OutlinedButton(
                           onPressed: _openCustomizeScreen,
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 16,
+                              horizontal: 8,
+                            ),
                             side: BorderSide(color: Colors.white24),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('Tùy chỉnh kế hoạch'),
+                              Flexible(
+                                child: Text(
+                                  'Tùy chỉnh kế hoạch',
+                                  textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
                               if (_customizedMeals != null) ...[
                                 const SizedBox(width: 4),
                                 const Icon(Icons.check_circle, size: 16),
@@ -495,15 +527,23 @@ class _MealPlanDetailScreenState extends State<MealPlanDetailScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(
+                      Flexible(
                         flex: 2,
                         child: ElevatedButton(
                           onPressed: _startMealPlan,
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 16,
+                              horizontal: 8,
+                            ),
                             backgroundColor: theme.colorScheme.primary,
                           ),
-                          child: const Text('Ăn theo kế hoạch này'),
+                          child: const Text(
+                            'Ăn theo kế hoạch này',
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ),
                     ],

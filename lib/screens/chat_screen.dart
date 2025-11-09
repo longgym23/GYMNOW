@@ -46,9 +46,13 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMessages(); // Load lịch sử chat từ Firestore
-    _addInitialMessageIfEmpty(); // Thêm message chào nếu chưa có
     _initSpeech();
+    // Load messages trước, sau đó mới thêm initial message nếu cần
+    _loadMessages().then((_) {
+      if (mounted) {
+        _addInitialMessageIfEmpty();
+      }
+    });
   }
 
   @override
@@ -91,7 +95,7 @@ class _ChatScreenState extends State<ChatScreen> {
           .collection('chats')
           .doc(user.uid)
           .collection('messages')
-          .orderBy('createdAt', descending: true)
+          .orderBy('createdAt', descending: false) // Sắp xếp từ cũ đến mới
           .get();
 
       final loadedMessages = querySnapshot.docs
@@ -120,12 +124,29 @@ class _ChatScreenState extends State<ChatScreen> {
           .whereType<types.Message>()
           .toList();
 
-      setStateIfMounted(() {
-        _messages.addAll(loadedMessages);
+      // Sắp xếp lại theo thời gian giảm dần (mới nhất trước, cũ nhất sau)
+      // Chat widget sẽ reverse danh sách để hiển thị: cũ ở trên, mới ở dưới (giống Messenger)
+      loadedMessages.sort((a, b) {
+        final aTime = a.createdAt ?? 0;
+        final bTime = b.createdAt ?? 0;
+        return bTime.compareTo(aTime); // Giảm dần (mới → cũ)
       });
+
+      if (mounted) {
+        setState(() {
+          _messages.clear();
+          _messages.addAll(loadedMessages);
+        });
+        // Scroll xuống dưới để hiển thị tin nhắn mới nhất (giống Messenger)
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Chat widget sẽ tự động scroll khi có messages mới
+        });
+      }
     } catch (e) {
       print('Lỗi load messages: $e');
-      _addErrorMessage('Không thể load lịch sử chat.');
+      if (mounted) {
+        _addErrorMessage('Không thể load lịch sử chat.');
+      }
     }
   }
 
@@ -168,13 +189,18 @@ class _ChatScreenState extends State<ChatScreen> {
       _speechEnabled = await _speechToText.initialize(
         onError: (errorNotification) =>
             print('Lỗi SpeechToText: $errorNotification'),
-        onStatus: (status) =>
-            setState(() => _isListening = _speechToText.isListening),
+        onStatus: (status) {
+          if (mounted) {
+            setState(() => _isListening = _speechToText.isListening);
+          }
+        },
       );
       if (mounted) setState(() {});
     } catch (e) {
       print("Lỗi khi khởi tạo SpeechToText: $e");
-      setState(() => _speechEnabled = false);
+      if (mounted) {
+        setState(() => _speechEnabled = false);
+      }
     }
   }
 
@@ -207,17 +233,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Callback khi có kết quả nhận dạng
   void _onSpeechResult(SpeechRecognitionResult result) {
-    setState(() {
-      _textController.text = result.recognizedWords;
-      _textController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _textController.text.length),
-      );
-    });
+    if (mounted) {
+      setState(() {
+        _textController.text = result.recognizedWords;
+        _textController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _textController.text.length),
+        );
+      });
+    }
   }
 
   /// Thêm tin nhắn chào mừng nếu danh sách rỗng
-  void _addInitialMessageIfEmpty() {
-    if (_messages.isEmpty) {
+  Future<void> _addInitialMessageIfEmpty() async {
+    if (_messages.isEmpty && mounted) {
       final initialMessage = types.TextMessage(
         author: _bot,
         createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -225,15 +253,29 @@ class _ChatScreenState extends State<ChatScreen> {
         text:
             'Xin chào! Tôi là Huấn luyện viên AI của bạn. Bạn cần giúp đỡ gì hôm nay?',
       );
-      _addMessage(initialMessage);
-      _saveMessage(initialMessage); // Lưu initial message
+      if (mounted) {
+        setState(() {
+          _messages.add(initialMessage);
+        });
+        await _saveMessage(initialMessage); // Lưu initial message
+      }
     }
   }
 
-  /// Hàm thêm một tin nhắn mới vào đầu danh sách
+  /// Hàm thêm một tin nhắn mới vào danh sách
+  /// Chat widget sẽ tự động scroll xuống dưới khi có tin nhắn mới (giống Messenger)
   void _addMessage(types.Message message) {
-    setStateIfMounted(() {
-      _messages.insert(0, message);
+    if (!mounted) return;
+    setState(() {
+      _messages.add(message);
+      // Sắp xếp lại theo thời gian giảm dần (mới nhất trước, cũ nhất sau)
+      // Chat widget sẽ reverse danh sách để hiển thị: cũ ở trên, mới ở dưới (giống Messenger)
+      // Tin nhắn mới nhất sẽ tự động scroll vào view
+      _messages.sort((a, b) {
+        final aTime = a.createdAt ?? 0;
+        final bTime = b.createdAt ?? 0;
+        return bTime.compareTo(aTime); // Giảm dần (mới → cũ)
+      });
     });
   }
 
@@ -250,14 +292,118 @@ class _ChatScreenState extends State<ChatScreen> {
     _saveMessage(errorMessage);
   }
 
+  /// Lấy thông tin đầy đủ của user từ Firestore và Nutrition Goals
+  Future<Map<String, dynamic>?> _getUserInfo() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+
+    try {
+      // Lấy thông tin từ user profile
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      Map<String, dynamic> userInfo = {};
+
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        userInfo = {
+          'height': data['height'] ?? 0.0,
+          'weight': data['weight'] ?? 0.0,
+          'age': data['age'] ?? 25,
+          'name': data['name'] ?? '',
+        };
+      }
+
+      // Lấy thông tin từ active nutrition goal (nếu có)
+      try {
+        final goalSnapshot = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('nutritionGoals')
+            .where('isActive', isEqualTo: true)
+            .limit(1)
+            .get();
+
+        if (goalSnapshot.docs.isNotEmpty) {
+          final goalData = goalSnapshot.docs.first.data();
+          userInfo['gender'] = goalData['gender'] ?? 'male';
+          userInfo['goalType'] = goalData['goalType'] ?? 'maintain';
+          userInfo['targetWeight'] = goalData['targetWeight'] ?? 0.0;
+          userInfo['targetCalories'] = goalData['targetCalories'] ?? 0.0;
+          userInfo['targetProtein'] = goalData['targetProtein'] ?? 0.0;
+          userInfo['targetCarbs'] = goalData['targetCarbs'] ?? 0.0;
+          userInfo['targetFat'] = goalData['targetFat'] ?? 0.0;
+
+          // Tính activity level từ targetCalories (nếu có)
+          if (userInfo['height'] > 0 &&
+              userInfo['weight'] > 0 &&
+              userInfo['age'] > 0) {
+            // Ước tính activity multiplier dựa trên targetCalories
+            final weight = userInfo['weight'] as num;
+            final age = userInfo['age'] as num;
+            final gender = userInfo['gender'] as String;
+            final height = userInfo['height'] as num;
+
+            // Tính BMR
+            double bmr;
+            if (gender == 'male') {
+              bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+            } else {
+              bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+            }
+
+            // Ước tính activity multiplier từ targetCalories
+            if (bmr > 0 && userInfo['targetCalories'] > 0) {
+              final estimatedMultiplier =
+                  (userInfo['targetCalories'] as num) / bmr;
+              String activityLevel = 'Trung bình';
+              if (estimatedMultiplier < 1.3) {
+                activityLevel = 'Ít vận động';
+              } else if (estimatedMultiplier < 1.6) {
+                activityLevel = 'Nhẹ';
+              } else if (estimatedMultiplier < 1.8) {
+                activityLevel = 'Trung bình';
+              } else if (estimatedMultiplier < 2.0) {
+                activityLevel = 'Năng động';
+              } else {
+                activityLevel = 'Rất năng động';
+              }
+              userInfo['activityLevel'] = activityLevel;
+            }
+          }
+        }
+      } catch (e) {
+        print('Lỗi lấy nutrition goal: $e');
+      }
+
+      // Trả về userInfo nếu có ít nhất height và weight
+      if (userInfo.isNotEmpty &&
+          userInfo.containsKey('height') &&
+          userInfo.containsKey('weight') &&
+          (userInfo['height'] as num) > 0 &&
+          (userInfo['weight'] as num) > 0) {
+        print('✅ Trả về userInfo với ${userInfo.length} trường dữ liệu');
+        return userInfo;
+      } else {
+        print('⚠️ UserInfo không đủ dữ liệu hoặc rỗng');
+        return null;
+      }
+    } catch (e) {
+      print('Lỗi lấy thông tin user: $e');
+      return null;
+    }
+  }
+
   /// Xử lý khi người dùng nhấn nút gửi tin nhắn
   void _handleSendPressed(types.PartialText message) async {
+    print('_handleSendPressed called with text: ${message.text}');
     final String textToSend = message.text.trim();
     final String? imageToSend = _imageBase64;
     final String? mimeTypeToSend = _imageMimeType;
     final String? localImageUri = _localImageUri;
 
+    print('Text to send: "$textToSend", Has image: ${imageToSend != null}');
+
     if (textToSend.isEmpty && imageToSend == null) {
+      print('Both text and image are empty, returning');
       return;
     }
 
@@ -283,31 +429,51 @@ class _ChatScreenState extends State<ChatScreen> {
     _addMessage(userMessage);
     _saveMessage(userMessage); // Lưu user message
 
-    setStateIfMounted(() {
-      _isBotTyping = true;
-      _imageBase64 = null;
-      _imageMimeType = null;
-      _localImageUri = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isBotTyping = true;
+        _imageBase64 = null;
+        _imageMimeType = null;
+        _localImageUri = null;
+      });
+    }
     _textController.clear();
 
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         _addErrorMessage('Lỗi: Bạn cần đăng nhập để hỏi AI.');
-        setStateIfMounted(() => _isBotTyping = false);
+        if (mounted) {
+          setState(() => _isBotTyping = false);
+        }
         return;
       }
       final idToken = await user.getIdToken();
+      print('Got user token, length: ${idToken?.length ?? 0}');
+
+      // Lấy thông tin chiều cao và cân nặng của user
+      final userInfo = await _getUserInfo();
+      print('📊 User info được gửi đến AI: $userInfo');
+      if (userInfo != null) {
+        print(
+          '✅ Có thông tin user: height=${userInfo['height']}, weight=${userInfo['weight']}, age=${userInfo['age']}, gender=${userInfo['gender']}',
+        );
+      } else {
+        print('⚠️ Không có thông tin user');
+      }
 
       const apiUrl = 'https://gymnow-pt-ai.onrender.com/askPTAI';
+      print('Sending request to: $apiUrl');
 
       final requestBody = jsonEncode({
         'message': textToSend,
         'imageBase64': imageToSend,
         'mimeType': mimeTypeToSend,
+        'userInfo': userInfo, // Thêm thông tin user (height, weight)
       });
+      print('Request body length: ${requestBody.length}');
 
+      print('Making HTTP POST request...');
       final response = await http
           .post(
             Uri.parse(apiUrl),
@@ -318,20 +484,53 @@ class _ChatScreenState extends State<ChatScreen> {
             body: requestBody,
           )
           .timeout(const Duration(seconds: 90));
+      print('HTTP request completed');
+
+      print('API Response Status: ${response.statusCode}');
+      print('API Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        if (data != null && data['reply'] != null) {
-          final botResponse = types.TextMessage(
-            author: _bot,
-            createdAt: DateTime.now().millisecondsSinceEpoch,
-            id: const Uuid().v4(),
-            text: data['reply'].toString(),
-          );
-          _addMessage(botResponse);
-          _saveMessage(botResponse); // Lưu bot response
-        } else {
-          _addErrorMessage('AI không thể tạo phản hồi (dữ liệu trống).');
+        try {
+          final responseBody = utf8.decode(response.bodyBytes);
+          print('Response body decoded: $responseBody');
+
+          final data = jsonDecode(responseBody);
+          print('Parsed data: $data');
+
+          if (data != null) {
+            // Kiểm tra nhiều format có thể có
+            String? replyText;
+            if (data['reply'] != null) {
+              replyText = data['reply'].toString();
+            } else if (data['message'] != null) {
+              replyText = data['message'].toString();
+            } else if (data['response'] != null) {
+              replyText = data['response'].toString();
+            } else if (data is String) {
+              replyText = data;
+            }
+
+            if (replyText != null && replyText.isNotEmpty) {
+              final botResponse = types.TextMessage(
+                author: _bot,
+                createdAt: DateTime.now().millisecondsSinceEpoch,
+                id: const Uuid().v4(),
+                text: replyText,
+              );
+              _addMessage(botResponse);
+              _saveMessage(botResponse); // Lưu bot response
+              print('Bot response added successfully');
+            } else {
+              print('No reply text found in response');
+              _addErrorMessage('AI không thể tạo phản hồi (dữ liệu trống).');
+            }
+          } else {
+            print('Response data is null');
+            _addErrorMessage('AI không thể tạo phản hồi (dữ liệu trống).');
+          }
+        } catch (e) {
+          print('Error parsing JSON response: $e');
+          _addErrorMessage('Lỗi xử lý phản hồi từ AI: $e');
         }
       } else {
         String errorMsg =
@@ -340,8 +539,12 @@ class _ChatScreenState extends State<ChatScreen> {
           final errorData = jsonDecode(utf8.decode(response.bodyBytes));
           if (errorData['error'] != null) {
             errorMsg = 'Lỗi từ AI: ${errorData['error']}';
+          } else if (errorData['message'] != null) {
+            errorMsg = 'Lỗi từ AI: ${errorData['message']}';
           }
-        } catch (e) {}
+        } catch (e) {
+          print('Error parsing error response: $e');
+        }
         print('Lỗi API Render: ${response.statusCode} - ${response.body}');
         _addErrorMessage(errorMsg);
       }
@@ -355,7 +558,9 @@ class _ChatScreenState extends State<ChatScreen> {
         _addErrorMessage('Đã xảy ra lỗi mạng hoặc kết nối.');
       }
     } finally {
-      setStateIfMounted(() => _isBotTyping = false);
+      if (mounted) {
+        setState(() => _isBotTyping = false);
+      }
     }
   }
 
@@ -413,11 +618,13 @@ class _ChatScreenState extends State<ChatScreen> {
         final mimeType = lookupMimeType(pickedFile.path) ?? 'image/jpeg';
 
         // Chỉ lưu vào state, không gửi ngay
-        setStateIfMounted(() {
-          _imageBase64 = base64Image;
-          _imageMimeType = mimeType;
-          _localImageUri = pickedFile.path;
-        });
+        if (mounted) {
+          setState(() {
+            _imageBase64 = base64Image;
+            _imageMimeType = mimeType;
+            _localImageUri = pickedFile.path;
+          });
+        }
       }
     } catch (e) {
       print("Lỗi chọn ảnh: $e");
@@ -427,17 +634,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Xóa ảnh preview
   void _clearImage() {
-    setStateIfMounted(() {
-      _imageBase64 = null;
-      _imageMimeType = null;
-      _localImageUri = null;
-    });
-  }
-
-  // Hàm tiện ích để gọi setState an toàn
-  void setStateIfMounted(VoidCallback fn) {
     if (mounted) {
-      setState(fn);
+      setState(() {
+        _imageBase64 = null;
+        _imageMimeType = null;
+        _localImageUri = null;
+      });
     }
   }
 
@@ -593,6 +795,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             _handleSendPressed(types.PartialText(text: text));
                           }
                         },
+                        textInputAction: TextInputAction.send,
                       ),
                     ),
                   ),
@@ -731,6 +934,10 @@ class _ChatScreenState extends State<ChatScreen> {
           messages: _messages,
           onSendPressed: _handleSendPressed,
           user: _user,
+          inputOptions: const InputOptions(
+            enabled:
+                false, // Disable default input vì đang dùng customBottomWidget
+          ),
           typingIndicatorOptions: TypingIndicatorOptions(
             typingUsers: _isBotTyping ? [_bot] : [],
           ),

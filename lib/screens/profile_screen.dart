@@ -32,7 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final userData = snapshot.data!.data() as Map<String, dynamic>;
           // **DÒNG CODE ĐƯỢC THÊM VÀO ĐỂ SỬA LỖI**
           final userModel = UserModel.fromFirestore(snapshot.data!);
-          
+
           return ListView(
             padding: const EdgeInsets.all(16.0),
             children: [
@@ -43,10 +43,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
                     children: [
-                      const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 60)),
+                      const CircleAvatar(
+                        radius: 50,
+                        child: Icon(Icons.person, size: 60),
+                      ),
                       const SizedBox(height: 16),
-                      Text(userData['name'] ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                      Text(userData['email'] ?? '', style: TextStyle(fontSize: 16, color: Colors.grey[400])),
+                      Text(
+                        userData['name'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        userData['email'] ?? '',
+                        style: TextStyle(fontSize: 16, color: Colors.grey[400]),
+                      ),
                     ],
                   ),
                 ),
@@ -55,8 +67,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 10),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white24, 
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  backgroundColor: Colors.white24,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 onPressed: () {
                   Navigator.push(
@@ -79,7 +93,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const HeartRateScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const HeartRateScreen(),
+                      ),
                     );
                   },
                 ),
@@ -91,8 +107,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      ListTile(title: const Text('Chiều cao'), trailing: Text('${userData['height'] ?? 0} cm')),
-                      ListTile(title: const Text('Cân nặng'), trailing: Text('${userData['weight'] ?? 0} kg')),
+                      ListTile(
+                        title: const Text('Chiều cao'),
+                        trailing: Text('${userData['height'] ?? 0} cm'),
+                      ),
+                      ListTile(
+                        title: const Text('Cân nặng'),
+                        trailing: Text('${userData['weight'] ?? 0} kg'),
+                      ),
+                      ListTile(
+                        title: const Text('Tuổi'),
+                        trailing: Text('${userData['age'] ?? 25} tuổi'),
+                      ),
                     ],
                   ),
                 ),
@@ -104,7 +130,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: const Icon(Icons.admin_panel_settings),
                   label: const Text('Bảng quản trị'),
                   onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminPanelScreen(),
+                      ),
+                    );
                   },
                 ),
             ],
