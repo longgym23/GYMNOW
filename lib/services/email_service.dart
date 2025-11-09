@@ -83,4 +83,52 @@ class EmailService {
       'message': 'Không thể gửi email sau nhiều lần thử.',
     };
   }
+
+  // Reset password trực tiếp (sau khi xác thực mã PIN)
+  Future<Map<String, dynamic>> resetPassword(
+    String email,
+    String newPassword,
+  ) async {
+    try {
+      print('📤 Đang reset password cho $email...');
+
+      final response = await http
+          .post(
+            Uri.parse('$_backendUrl/resetPassword'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email, 'newPassword': newPassword}),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw Exception('Request timeout sau 30 giây');
+            },
+          );
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Mật khẩu đã được đặt lại thành công',
+        };
+      } else {
+        final data = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message':
+              data['message'] ??
+              'Không thể đặt lại mật khẩu. Vui lòng thử lại sau.',
+        };
+      }
+    } catch (e) {
+      print('❌ Lỗi khi reset password: $e');
+      return {
+        'success': false,
+        'message': 'Không thể kết nối đến server. Vui lòng thử lại sau.',
+      };
+    }
+  }
 }
