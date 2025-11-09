@@ -3,29 +3,21 @@ const express = require("express");
 const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const admin = require("firebase-admin"); // Import Firebase Admin
-const nodemailer = require("nodemailer");
+const https = require("https");
 
 // --- Cấu hình ---
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Cấu hình email (Gmail SMTP)
-const EMAIL_USER = process.env.EMAIL_USER || ""; // Email gửi đi (ví dụ: your-email@gmail.com)
-const EMAIL_PASS = process.env.EMAIL_PASS || ""; // App Password của Gmail (không phải mật khẩu thường)
+// Cấu hình email - Sử dụng SendGrid API (không cần SMTP)
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || "";
+const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@gymnow.com"; // Email gửi đi (phải được verify trong SendGrid)
 
-// Tạo transporter cho nodemailer
-let transporter = null;
-if (EMAIL_USER && EMAIL_PASS) {
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_PASS, // Sử dụng App Password, không phải mật khẩu thường
-    },
-  });
-  console.log("✅ Email service đã được cấu hình");
+// Kiểm tra cấu hình email
+if (SENDGRID_API_KEY) {
+  console.log("✅ Email service (SendGrid) đã được cấu hình");
 } else {
-  console.warn("⚠️ Email service chưa được cấu hình. Vui lòng set EMAIL_USER và EMAIL_PASS trong environment variables.");
+  console.warn("⚠️ Email service chưa được cấu hình. Vui lòng set SENDGRID_API_KEY trong environment variables.");
 }
 
 // Khởi tạo Firebase Admin SDK (Tự động đọc GOOGLE_APPLICATION_CREDENTIALS)
@@ -323,51 +315,101 @@ app.post("/sendPinEmail", async (req, res) => {
     console.log(`   Mã PIN: ${pin}`);
     console.log(`   Thời gian: ${new Date().toLocaleString('vi-VN')}`);
 
-    // Gửi email thực tế nếu đã cấu hình
-    if (transporter) {
+    // Gửi email thực tế nếu đã cấu hình SendGrid
+    if (SENDGRID_API_KEY) {
       try {
-        const mailOptions = {
-          from: `"GymNow" <${EMAIL_USER}>`,
-          to: email,
-          subject: "Mã PIN đặt lại mật khẩu - GymNow",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="background: linear-gradient(135deg, #1B263B 0%, #415A77 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-                <h1 style="color: white; margin: 0;">GymNow</h1>
-              </div>
-              <div style="background: #f5f5f5; padding: 30px; border-radius: 0 0 10px 10px;">
-                <h2 style="color: #1B263B; margin-top: 0;">Mã PIN đặt lại mật khẩu</h2>
-                <p style="color: #333; font-size: 16px;">Xin chào,</p>
-                <p style="color: #333; font-size: 16px;">Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản GymNow của mình.</p>
-                <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px solid #1B263B;">
-                  <p style="color: #666; margin: 0 0 10px 0; font-size: 14px;">Mã PIN của bạn là:</p>
-                  <h1 style="color: #1B263B; font-size: 36px; letter-spacing: 5px; margin: 0;">${pin}</h1>
+        // Sử dụng SendGrid API (không cần SMTP, tránh bị block)
+        const emailData = {
+          personalizations: [
+            {
+              to: [{ email: email }],
+              subject: "Mã PIN đặt lại mật khẩu - GymNow"
+            }
+          ],
+          from: { email: EMAIL_FROM, name: "GymNow" },
+          content: [
+            {
+              type: "text/html",
+              value: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <div style="background: linear-gradient(135deg, #1B263B 0%, #415A77 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+                    <h1 style="color: white; margin: 0;">GymNow</h1>
+                  </div>
+                  <div style="background: #f5f5f5; padding: 30px; border-radius: 0 0 10px 10px;">
+                    <h2 style="color: #1B263B; margin-top: 0;">Mã PIN đặt lại mật khẩu</h2>
+                    <p style="color: #333; font-size: 16px;">Xin chào,</p>
+                    <p style="color: #333; font-size: 16px;">Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản GymNow của mình.</p>
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px solid #1B263B;">
+                      <p style="color: #666; margin: 0 0 10px 0; font-size: 14px;">Mã PIN của bạn là:</p>
+                      <h1 style="color: #1B263B; font-size: 36px; letter-spacing: 5px; margin: 0;">${pin}</h1>
+                    </div>
+                    <p style="color: #666; font-size: 14px; margin-top: 20px;">
+                      <strong>Lưu ý:</strong> Mã PIN này có hiệu lực trong <strong>10 phút</strong> và chỉ có thể sử dụng một lần.
+                    </p>
+                    <p style="color: #666; font-size: 14px;">
+                      Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+                    </p>
+                    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+                    <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
+                      Email này được gửi tự động, vui lòng không trả lời.
+                    </p>
+                  </div>
                 </div>
-                <p style="color: #666; font-size: 14px; margin-top: 20px;">
-                  <strong>Lưu ý:</strong> Mã PIN này có hiệu lực trong <strong>10 phút</strong> và chỉ có thể sử dụng một lần.
-                </p>
-                <p style="color: #666; font-size: 14px;">
-                  Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
-                </p>
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
-                  Email này được gửi tự động, vui lòng không trả lời.
-                </p>
-              </div>
-            </div>
-          `,
-          text: `Mã PIN đặt lại mật khẩu của bạn là: ${pin}\n\nMã PIN có hiệu lực trong 10 phút và chỉ có thể sử dụng một lần.\n\nNếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.`,
+              `
+            }
+          ]
         };
 
-        await transporter.sendMail(mailOptions);
-        console.log(`✅ Email đã được gửi thành công đến ${email}`);
-        
+        const postData = JSON.stringify(emailData);
+        const options = {
+          hostname: 'api.sendgrid.com',
+          port: 443,
+          path: '/v3/mail/send',
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          },
+          timeout: 10000 // 10 seconds timeout
+        };
+
+        // Gửi email qua SendGrid API
+        await new Promise((resolve, reject) => {
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                console.log(`✅ Email đã được gửi thành công đến ${email} qua SendGrid`);
+                resolve();
+              } else {
+                console.error(`❌ SendGrid API error: ${res.statusCode} - ${data}`);
+                reject(new Error(`SendGrid API error: ${res.statusCode}`));
+              }
+            });
+          });
+
+          req.on('error', (error) => {
+            console.error('❌ Lỗi khi gửi request đến SendGrid:', error);
+            reject(error);
+          });
+
+          req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('SendGrid request timeout'));
+          });
+
+          req.write(postData);
+          req.end();
+        });
+
         return res.status(200).send({
           success: true,
           message: "Mã PIN đã được gửi đến email của bạn"
         });
       } catch (emailError) {
-        console.error('❌ Lỗi khi gửi email:', emailError);
+        console.error('❌ Lỗi khi gửi email qua SendGrid:', emailError);
         // Vẫn trả về success nếu có lỗi email nhưng đã log ra console
         return res.status(200).send({
           success: true,
