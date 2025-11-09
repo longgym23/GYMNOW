@@ -8,12 +8,13 @@ class DatabaseService {
   final CollectionReference userCollection = FirebaseFirestore.instance
       .collection('users');
 
-  // **SỬA ĐỔI 1: Thêm 'role' vào hàm cập nhật dữ liệu**
+  // **SỬA ĐỔI 1: Thêm 'age' và 'role' vào hàm cập nhật dữ liệu**
   Future<void> updateUserData(
     String name,
     String email,
     double height,
     double weight,
+    int age,
     String role,
   ) async {
     return await userCollection.doc(uid).set({
@@ -21,7 +22,8 @@ class DatabaseService {
       'email': email,
       'height': height,
       'weight': weight,
-      'role': role, // Thêm trường vai trò
+      'age': age,
+      'role': role,
     });
   }
 
@@ -71,6 +73,140 @@ class DatabaseService {
       await workoutCollection.doc(sessionId).delete();
     } catch (e) {
       print('Lỗi khi xóa buổi tập: $e');
+      rethrow;
+    }
+  }
+
+  // **THÊM MỚI: Hàm lấy workouts của một user cụ thể (cho Admin)**
+  Stream<QuerySnapshot> getWorkoutSessionsStreamForUser(String userId) {
+    final workoutCollection = FirebaseFirestore.instance
+        .collection('workouts')
+        .doc(userId)
+        .collection('sessions');
+    return workoutCollection.orderBy('startTime', descending: true).snapshots();
+  }
+
+  // **THÊM MỚI: Hàm lấy meal plans của một user cụ thể (cho Admin)**
+  Stream<QuerySnapshot> getMealPlansStreamForUser(String userId) {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('userMealPlans')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  // **THÊM MỚI: Hàm lấy food logs của một user cụ thể (cho Admin)**
+  Stream<QuerySnapshot> getFoodLogsStreamForUser(String userId) {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('foodLogs')
+        .orderBy('scheduledAt', descending: true)
+        .snapshots();
+  }
+
+  // **THÊM MỚI: Hàm xóa workout session của một user (cho Admin)**
+  Future<void> deleteWorkoutSessionForUser(
+    String userId,
+    String sessionId,
+  ) async {
+    try {
+      final workoutCollection = FirebaseFirestore.instance
+          .collection('workouts')
+          .doc(userId)
+          .collection('sessions');
+      await workoutCollection.doc(sessionId).delete();
+    } catch (e) {
+      print('Lỗi khi xóa buổi tập: $e');
+      rethrow;
+    }
+  }
+
+  // **THÊM MỚI: Hàm xóa meal plan của một user (cho Admin)**
+  Future<void> deleteMealPlanForUser(String userId, String mealPlanId) async {
+    try {
+      // Xóa meal plan document
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('userMealPlans')
+          .doc(mealPlanId)
+          .delete();
+
+      // Xóa tất cả các days subcollection
+      final daysSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('userMealPlans')
+          .doc(mealPlanId)
+          .collection('days')
+          .get();
+
+      for (final dayDoc in daysSnapshot.docs) {
+        await dayDoc.reference.delete();
+      }
+    } catch (e) {
+      print('Lỗi khi xóa thực đơn: $e');
+      rethrow;
+    }
+  }
+
+  // **THÊM MỚI: Hàm xóa user (cho Admin) - Xóa tất cả dữ liệu liên quan**
+  Future<void> deleteUserForAdmin(String userId) async {
+    try {
+      // Xóa user document
+      await userCollection.doc(userId).delete();
+
+      // Xóa workouts
+      final workoutsSnapshot = await FirebaseFirestore.instance
+          .collection('workouts')
+          .doc(userId)
+          .collection('sessions')
+          .get();
+      for (final workoutDoc in workoutsSnapshot.docs) {
+        await workoutDoc.reference.delete();
+      }
+
+      // Xóa meal plans
+      final mealPlansSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('userMealPlans')
+          .get();
+      for (final mealPlanDoc in mealPlansSnapshot.docs) {
+        // Xóa days subcollection
+        final daysSnapshot = await mealPlanDoc.reference
+            .collection('days')
+            .get();
+        for (final dayDoc in daysSnapshot.docs) {
+          await dayDoc.reference.delete();
+        }
+        // Xóa meal plan
+        await mealPlanDoc.reference.delete();
+      }
+
+      // Xóa food logs
+      final foodLogsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('foodLogs')
+          .get();
+      for (final foodLogDoc in foodLogsSnapshot.docs) {
+        await foodLogDoc.reference.delete();
+      }
+
+      // Xóa nutrition goals
+      final goalsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('nutritionGoals')
+          .get();
+      for (final goalDoc in goalsSnapshot.docs) {
+        await goalDoc.reference.delete();
+      }
+    } catch (e) {
+      print('Lỗi khi xóa user: $e');
       rethrow;
     }
   }

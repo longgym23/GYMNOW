@@ -333,43 +333,177 @@ class _JournalScreenState extends State<JournalScreen> {
                     '📊 Nhật ký - Filtered docs: ${filteredDocs.length} từ ${docs.length} total',
                   );
 
+                  // Kiểm tra xem có macro nào vượt quá target không
+                  final isOverCal = totals['calories']! > targetCal;
+                  final isOverProtein = totals['protein']! > targetProtein;
+                  final isOverCarbs = totals['carbs']! > targetCarbs;
+                  final isOverFat = totals['fat']! > targetFat;
+                  final hasAnyOver =
+                      isOverCal || isOverProtein || isOverCarbs || isOverFat;
+
                   return Column(
                     children: [
-                      // Nutrition Summary
+                      // Banner cảnh báo nếu có macro vượt quá
+                      if (hasAnyOver)
+                        Container(
+                          margin: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.red.withOpacity(0.2),
+                                Colors.orange.withOpacity(0.1),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.red.withOpacity(0.5),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.red.withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.red,
+                                  size: 28,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Cảnh báo: Vượt quá mục tiêu',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        if (isOverCal)
+                                          _buildWarningChip(
+                                            'Calo',
+                                            totals['calories']! - targetCal,
+                                          ),
+                                        if (isOverProtein)
+                                          _buildWarningChip(
+                                            'Protein',
+                                            totals['protein']! - targetProtein,
+                                          ),
+                                        if (isOverCarbs)
+                                          _buildWarningChip(
+                                            'Carbs',
+                                            totals['carbs']! - targetCarbs,
+                                          ),
+                                        if (isOverFat)
+                                          _buildWarningChip(
+                                            'Fat',
+                                            totals['fat']! - targetFat,
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      // Nutrition Summary - Compact 2x2 Grid Layout
                       Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         child: Column(
                           children: [
-                            _buildProgressRow(
-                              Icons.local_fire_department,
-                              Colors.purple,
-                              totals['calories']!,
-                              targetCal,
-                              'cal',
+                            // Row 1: Calories and Protein
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildCompactNutritionCard(
+                                    icon: Icons.local_fire_department,
+                                    label: 'Calories',
+                                    current: totals['calories']!,
+                                    target: targetCal,
+                                    unit: 'cal',
+                                    color: Colors.purple,
+                                    gradient: [
+                                      Colors.purple.shade400,
+                                      Colors.purple.shade600,
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildCompactNutritionCard(
+                                    icon: Icons.bolt,
+                                    label: 'Protein',
+                                    current: totals['protein']!,
+                                    target: targetProtein,
+                                    unit: 'g',
+                                    color: Colors.red,
+                                    gradient: [
+                                      Colors.red.shade400,
+                                      Colors.red.shade600,
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 12),
-                            _buildProgressRow(
-                              Icons.bolt,
-                              Colors.red,
-                              totals['protein']!,
-                              targetProtein,
-                              'g',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildProgressRow(
-                              Icons.grain,
-                              Colors.blue,
-                              totals['carbs']!,
-                              targetCarbs,
-                              'g',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildProgressRow(
-                              Icons.oil_barrel,
-                              Colors.amber,
-                              totals['fat']!,
-                              targetFat,
-                              'g',
+                            const SizedBox(height: 10),
+                            // Row 2: Carbs and Fat
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildCompactNutritionCard(
+                                    icon: Icons.grain,
+                                    label: 'Carbs',
+                                    current: totals['carbs']!,
+                                    target: targetCarbs,
+                                    unit: 'g',
+                                    color: Colors.blue,
+                                    gradient: [
+                                      Colors.blue.shade400,
+                                      Colors.blue.shade600,
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildCompactNutritionCard(
+                                    icon: Icons.oil_barrel,
+                                    label: 'Fat',
+                                    current: totals['fat']!,
+                                    target: targetFat,
+                                    unit: 'g',
+                                    color: Colors.amber,
+                                    gradient: [
+                                      Colors.amber.shade400,
+                                      Colors.amber.shade600,
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -650,45 +784,221 @@ class _JournalScreenState extends State<JournalScreen> {
     );
   }
 
-  Widget _buildProgressRow(
-    IconData icon,
-    Color color,
-    double current,
-    double target,
-    String unit,
-  ) {
+  Widget _buildCompactNutritionCard({
+    required IconData icon,
+    required String label,
+    required double current,
+    required double target,
+    required String unit,
+    required Color color,
+    required List<Color> gradient,
+  }) {
+    final isOverTarget = current > target;
     final progress = (current / target).clamp(0.0, 1.0);
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${current.toStringAsFixed(0)} / ${target.toStringAsFixed(0)} $unit',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  Text(
-                    '${(progress * 100).toStringAsFixed(0)}%',
-                    style: const TextStyle(fontSize: 12, color: Colors.white70),
-                  ),
-                ],
+    final displayProgress = isOverTarget ? 1.0 : progress;
+    final percentage = isOverTarget
+        ? ((current - target) / target * 100)
+        : (progress * 100);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isOverTarget
+            ? Colors.red.withOpacity(0.15)
+            : const Color(0xFF1B263B),
+        borderRadius: BorderRadius.circular(12),
+        border: isOverTarget
+            ? Border.all(color: Colors.red.withOpacity(0.6), width: 1.5)
+            : Border.all(
+                color: Colors.grey.shade700.withOpacity(0.3),
+                width: 1,
               ),
-              const SizedBox(height: 4),
-              LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.grey.shade700,
-                valueColor: AlwaysStoppedAnimation<Color>(color),
+        boxShadow: [
+          BoxShadow(
+            color: isOverTarget
+                ? Colors.red.withOpacity(0.15)
+                : Colors.black.withOpacity(0.15),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header with icon and label
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isOverTarget
+                        ? [Colors.red.shade400, Colors.red.shade600]
+                        : gradient,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isOverTarget ? Colors.red : color).withOpacity(
+                        0.3,
+                      ),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  children: [
+                    Icon(icon, color: Colors.white, size: 16),
+                    if (isOverTarget)
+                      Positioned(
+                        right: -1,
+                        top: -1,
+                        child: Container(
+                          padding: const EdgeInsets.all(1.5),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.warning,
+                            size: 7,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[400],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '${current.toStringAsFixed(0)} / ${target.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isOverTarget ? Colors.red : Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Percentage badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isOverTarget
+                      ? Colors.red.withOpacity(0.2)
+                      : color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isOverTarget
+                        ? Colors.red.withOpacity(0.5)
+                        : color.withOpacity(0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  isOverTarget
+                      ? '+${percentage.toStringAsFixed(0)}%'
+                      : '${percentage.toStringAsFixed(0)}%',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: isOverTarget ? Colors.red : color,
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: displayProgress,
+              minHeight: 4,
+              backgroundColor: Colors.grey.shade800,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isOverTarget ? Colors.red : color,
+              ),
+            ),
+          ),
+          // Over target warning
+          if (isOverTarget) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 12,
+                  color: Colors.red.shade300,
+                ),
+                const SizedBox(width: 3),
+                Expanded(
+                  child: Text(
+                    'Vượt quá ${(current - target).toStringAsFixed(0)} $unit',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.red.shade300,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWarningChip(String label, double excess) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '+${excess.toStringAsFixed(0)}',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -865,24 +1175,114 @@ class _FoodSearchDialogState extends State<_FoodSearchDialog> {
     super.dispose();
   }
 
+  /// Hàm remove dấu tiếng Việt
+  String _removeDiacritics(String str) {
+    const Map<String, String> diacriticsMap = {
+      'à': 'a',
+      'á': 'a',
+      'ạ': 'a',
+      'ả': 'a',
+      'ã': 'a',
+      'â': 'a',
+      'ầ': 'a',
+      'ấ': 'a',
+      'ậ': 'a',
+      'ẩ': 'a',
+      'ẫ': 'a',
+      'ă': 'a',
+      'ằ': 'a',
+      'ắ': 'a',
+      'ặ': 'a',
+      'ẳ': 'a',
+      'ẵ': 'a',
+      'è': 'e',
+      'é': 'e',
+      'ẹ': 'e',
+      'ẻ': 'e',
+      'ẽ': 'e',
+      'ê': 'e',
+      'ề': 'e',
+      'ế': 'e',
+      'ệ': 'e',
+      'ể': 'e',
+      'ễ': 'e',
+      'ì': 'i',
+      'í': 'i',
+      'ị': 'i',
+      'ỉ': 'i',
+      'ĩ': 'i',
+      'ò': 'o',
+      'ó': 'o',
+      'ọ': 'o',
+      'ỏ': 'o',
+      'õ': 'o',
+      'ô': 'o',
+      'ồ': 'o',
+      'ố': 'o',
+      'ộ': 'o',
+      'ổ': 'o',
+      'ỗ': 'o',
+      'ơ': 'o',
+      'ờ': 'o',
+      'ớ': 'o',
+      'ợ': 'o',
+      'ở': 'o',
+      'ỡ': 'o',
+      'ù': 'u',
+      'ú': 'u',
+      'ụ': 'u',
+      'ủ': 'u',
+      'ũ': 'u',
+      'ư': 'u',
+      'ừ': 'u',
+      'ứ': 'u',
+      'ự': 'u',
+      'ử': 'u',
+      'ữ': 'u',
+      'ỳ': 'y',
+      'ý': 'y',
+      'ỵ': 'y',
+      'ỷ': 'y',
+      'ỹ': 'y',
+      'đ': 'd',
+    };
+
+    String result = str.toLowerCase();
+    diacriticsMap.forEach((vietnamese, english) {
+      result = result.replaceAll(vietnamese, english);
+    });
+    return result;
+  }
+
+  /// Kiểm tra xem food có match với search query không (hỗ trợ không dấu và chữ cái đầu)
+  bool _matchesSearch(String foodName, String query) {
+    final normalizedFood = _removeDiacritics(foodName);
+    final normalizedQuery = _removeDiacritics(query);
+
+    // Tìm kiếm chính xác hoặc chứa
+    if (normalizedFood.contains(normalizedQuery)) {
+      return true;
+    }
+
+    // Tìm kiếm theo chữ cái đầu của từng từ
+    final words = normalizedFood.split(' ');
+    final firstLetters = words.map((w) => w.isNotEmpty ? w[0] : '').join('');
+    if (firstLetters.contains(normalizedQuery)) {
+      return true;
+    }
+
+    return false;
+  }
+
   void _updateSearch(String query) {
     setState(() {
       searchQuery = query.toLowerCase();
-      if (searchQuery.isEmpty) {
-        foodsStream = FirebaseFirestore.instance
-            .collection('foods')
-            .orderBy('name')
-            .limit(50)
-            .snapshots();
-      } else {
-        foodsStream = FirebaseFirestore.instance
-            .collection('foods')
-            .orderBy('searchName')
-            .startAt([searchQuery])
-            .endAt(['${searchQuery}\uf8ff'])
-            .limit(50)
-            .snapshots();
-      }
+      // Lấy tất cả foods và filter ở client-side
+      foodsStream = FirebaseFirestore.instance
+          .collection('foods')
+          .orderBy('name')
+          .limit(200)
+          .snapshots();
     });
   }
 
@@ -1092,13 +1492,59 @@ class _FoodSearchDialogState extends State<_FoodSearchDialog> {
                       ),
                     );
                   }
+
+                  final foodDocs = snapshot.data!.docs;
+
+                  // Filter kết quả nếu có search query
+                  final filteredDocs = searchQuery.isNotEmpty
+                      ? foodDocs.where((doc) {
+                          final food = FoodItem.fromFirestore(doc);
+                          return _matchesSearch(food.name, searchQuery);
+                        }).toList()
+                      : foodDocs;
+
+                  if (filteredDocs.isEmpty && searchQuery.isNotEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A3B4F),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.restaurant_menu,
+                              size: 48,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            'Không tìm thấy món ăn',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: snapshot.data!.docs.length,
+                    itemCount: filteredDocs.length,
                     itemBuilder: (context, index) {
-                      final food = FoodItem.fromFirestore(
-                        snapshot.data!.docs[index],
-                      );
+                      final food = FoodItem.fromFirestore(filteredDocs[index]);
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
