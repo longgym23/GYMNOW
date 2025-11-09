@@ -433,6 +433,65 @@ app.post("/sendPinEmail", async (req, res) => {
   }
 });
 
+// --- Endpoint reset password trực tiếp (sau khi xác thực mã PIN) ---
+app.post("/resetPassword", async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).send({
+        success: false,
+        message: "Thiếu email hoặc mật khẩu mới"
+      });
+    }
+
+    // Kiểm tra độ dài mật khẩu
+    if (newPassword.length < 6) {
+      return res.status(400).send({
+        success: false,
+        message: "Mật khẩu phải có ít nhất 6 ký tự"
+      });
+    }
+
+    try {
+      // Tìm user bằng email
+      const userRecord = await admin.auth().getUserByEmail(email);
+      
+      // Cập nhật mật khẩu trực tiếp
+      await admin.auth().updateUser(userRecord.uid, {
+        password: newPassword
+      });
+
+      console.log(`✅ Đã đặt lại mật khẩu thành công cho ${email}`);
+
+      return res.status(200).send({
+        success: true,
+        message: "Mật khẩu đã được đặt lại thành công"
+      });
+    } catch (authError) {
+      console.error('❌ Lỗi khi reset password:', authError);
+      
+      if (authError.code === 'auth/user-not-found') {
+        return res.status(404).send({
+          success: false,
+          message: "Email không tồn tại trong hệ thống"
+        });
+      }
+      
+      return res.status(500).send({
+        success: false,
+        message: "Không thể đặt lại mật khẩu. Vui lòng thử lại sau."
+      });
+    }
+  } catch (error) {
+    console.error('❌ Lỗi khi xử lý yêu cầu reset password:', error);
+    return res.status(500).send({
+      success: false,
+      message: "Có lỗi xảy ra. Vui lòng thử lại sau."
+    });
+  }
+});
+
 // --- Khởi động Server ---
 app.listen(PORT, () => {
   console.log(`Server đang chạy tại cổng ${PORT}`);

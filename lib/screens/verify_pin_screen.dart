@@ -63,13 +63,35 @@ class _VerifyPinScreenState extends State<VerifyPinScreen> {
       });
 
       if (result['success'] == true) {
-        // Chuyển đến màn hình đặt lại mật khẩu
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ResetPasswordScreen(email: widget.email),
+        // Hiển thị thông báo thành công giống như đăng nhập
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Xác thực mã PIN thành công!',
+              textAlign: TextAlign.center,
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 50, left: 20, right: 20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24.0),
+            ),
+            duration: const Duration(seconds: 1),
           ),
         );
+
+        // Đợi một chút để hiển thị thông báo
+        await Future.delayed(const Duration(milliseconds: 1200));
+
+        // Chuyển đến màn hình đặt lại mật khẩu
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ResetPasswordScreen(email: widget.email),
+            ),
+          );
+        }
       } else {
         setState(() {
           _error = result['message'] as String;
@@ -188,6 +210,9 @@ class _VerifyPinScreenState extends State<VerifyPinScreen> {
                           textAlign: TextAlign.center,
                           keyboardType: TextInputType.number,
                           maxLength: 1,
+                          obscureText: true, // Hiển thị dấu * khi nhập
+                          obscuringCharacter:
+                              '*', // Sử dụng dấu * thay vì dấu chấm
                           style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,

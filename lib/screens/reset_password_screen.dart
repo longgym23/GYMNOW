@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gym_now/services/pin_service.dart';
+import 'package:gym_now/services/email_service.dart';
 import 'package:gym_now/screens/login_screen.dart';
 import 'package:gym_now/widgets/wave_clipper.dart';
 
@@ -15,7 +15,7 @@ class ResetPasswordScreen extends StatefulWidget {
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final PinService _pinService = PinService();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final EmailService _emailService = EmailService();
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -39,67 +39,57 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       });
 
       try {
-        // Kiểm tra email có tồn tại không
-        final methods = await _auth.fetchSignInMethodsForEmail(widget.email);
-        if (methods.isEmpty) {
-          setState(() {
-            _isLoading = false;
-            _error = 'Email không tồn tại trong hệ thống';
-          });
-          return;
-        }
-
-        // Gửi email reset password từ Firebase Auth
-        // User sẽ nhận email với link để đặt lại mật khẩu
-        await _auth.sendPasswordResetEmail(
-          email: widget.email,
-          actionCodeSettings: ActionCodeSettings(
-            url: 'https://gymnow-e1ebd.firebaseapp.com',
-            handleCodeInApp: false,
-          ),
+        // Đặt lại mật khẩu trực tiếp qua backend (Firebase Admin SDK)
+        final newPassword = _passwordController.text.trim();
+        final result = await _emailService.resetPassword(
+          widget.email,
+          newPassword,
         );
 
-        // Xóa mã PIN đã sử dụng
-        await _pinService.deletePin(widget.email);
-
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Link đặt lại mật khẩu đã được gửi đến email của bạn. Vui lòng kiểm tra email và làm theo hướng dẫn để đặt mật khẩu mới.',
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 6),
-              action: SnackBarAction(
-                label: 'Đóng',
-                textColor: Colors.white,
-                onPressed: () {},
-              ),
-            ),
-          );
+          setState(() {
+            _isLoading = false;
+          });
 
-          // Chuyển về màn hình đăng nhập sau 2 giây
-          await Future.delayed(const Duration(seconds: 2));
+          if (result['success'] == true) {
+            // Xóa mã PIN đã sử dụng
+            await _pinService.deletePin(widget.email);
 
-          if (mounted) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const LoginScreen()),
-              (route) => false,
+            // Hiển thị thông báo thành công
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result['message'] as String),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+                action: SnackBarAction(
+                  label: 'Đóng',
+                  textColor: Colors.white,
+                  onPressed: () {},
+                ),
+              ),
             );
+
+            // Chuyển về màn hình đăng nhập sau 2 giây
+            await Future.delayed(const Duration(seconds: 2));
+
+            if (mounted) {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                (route) => false,
+              );
+            }
+          } else {
+            setState(() {
+              _error = result['message'] as String;
+            });
           }
         }
       } catch (e) {
         if (mounted) {
           setState(() {
             _isLoading = false;
-            if (e.toString().contains('user-not-found')) {
-              _error = 'Email không tồn tại trong hệ thống';
-            } else if (e.toString().contains('invalid-email')) {
-              _error = 'Email không hợp lệ';
-            } else {
-              _error = 'Có lỗi xảy ra. Vui lòng thử lại sau.';
-            }
+            _error = 'Có lỗi xảy ra. Vui lòng thử lại sau.';
           });
         }
       }
