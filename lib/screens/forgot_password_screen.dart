@@ -45,6 +45,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             _successMessage = result['message'] as String;
           });
 
+          // Hiển thị thông báo thành công
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] as String),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+
           // Chuyển đến màn hình xác thực mã PIN
           Navigator.push(
             context,
@@ -56,6 +65,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           setState(() {
             _error = result['message'] as String;
           });
+
+          // Hiển thị thông báo lỗi
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] as String),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
         }
       }
     }
