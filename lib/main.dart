@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show debugPaintSizeEnabled;
 import 'package:gym_now/screens/splash_screen.dart';
+import 'package:gym_now/widgets/network_banner.dart';
 import 'package:intl/date_symbol_data_local.dart'; // **<-- ĐÃ SỬA**
 import 'package:flutter_localizations/flutter_localizations.dart'; // **<-- THÊM MỚI**
 
@@ -78,6 +79,9 @@ class MyApp extends StatelessWidget {
         ).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
       ),
       home: const SplashScreen(),
+      builder: (context, child) {
+        return NetworkBanner(child: child ?? const SizedBox());
+      },
     );
   }
 }
