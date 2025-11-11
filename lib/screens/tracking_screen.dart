@@ -12,6 +12,7 @@ import 'package:gym_now/models/workout_model.dart';
 import 'package:gym_now/models/workout_type_model.dart';
 import 'package:gym_now/screens/goal_setting_screen.dart';
 import 'package:gym_now/services/database_service.dart';
+import 'package:gym_now/services/notification_service.dart';
 import 'package:uuid/uuid.dart';
 
 // Class để lưu thông tin điểm GPS với timestamp
@@ -46,6 +47,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
   final List<RoutePointWithTime> _routePointsWithTime =
       []; // Lưu điểm với timestamp để tính vận tốc
   final Set<Polyline> _polylines = {};
+  // Biến để lọc GPS nhiễu
+  static const double _maxDistancePerUpdate =
+      100.0; // Tối đa 100m giữa 2 điểm (tránh GPS nhảy)
+  static const double _minDistanceForUpdate =
+      5.0; // Tối thiểu 5m mới cập nhật (tối ưu hiệu năng)
   StreamSubscription<Position>? _positionStreamSubscription;
   static const CameraPosition _initialPosition = CameraPosition(
     target: LatLng(10.762622, 106.660172),
@@ -192,31 +198,105 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
       // Kiểm tra xem đã đạt mục tiêu chưa
       bool goalReached = false;
+      String goalTypeText = '';
+      String goalValueText = '';
+      Map<String, dynamic> goalDetails = {};
+
       if (_workoutGoal.type == GoalType.distance &&
-          _totalDistance >= _workoutGoal.value)
+          _totalDistance >= _workoutGoal.value) {
         goalReached = true;
-      if (_workoutGoal.type == GoalType.time &&
-          _durationInSeconds >= _workoutGoal.value)
+        goalTypeText = 'Khoảng cách';
+        goalValueText = '${(_totalDistance / 1000).toStringAsFixed(2)} km';
+        goalDetails = {
+          'Mục tiêu': '${(_workoutGoal.value / 1000).toStringAsFixed(2)} km',
+          'Đạt được': goalValueText,
+        };
+      } else if (_workoutGoal.type == GoalType.time &&
+          _durationInSeconds >= _workoutGoal.value) {
         goalReached = true;
-      if (_workoutGoal.type == GoalType.calories &&
-          _caloriesBurned >= _workoutGoal.value)
+        goalTypeText = 'Thời gian';
+        goalValueText = _formatDuration(_durationInSeconds);
+        goalDetails = {
+          'Mục tiêu': _formatDuration(_workoutGoal.value.toInt()),
+          'Đạt được': goalValueText,
+        };
+      } else if (_workoutGoal.type == GoalType.calories &&
+          _caloriesBurned >= _workoutGoal.value) {
         goalReached = true;
+        goalTypeText = 'Calo';
+        goalValueText = '${_caloriesBurned.toStringAsFixed(0)} kcal';
+        goalDetails = {
+          'Mục tiêu': '${_workoutGoal.value.toInt()} kcal',
+          'Đạt được': goalValueText,
+        };
+      }
 
       if (goalReached) {
+        // Gửi thông báo hoàn thành mục tiêu
+        NotificationService().showGoalCompletedNotification(
+          title: '🎉 Chúc mừng! Bạn đã hoàn thành mục tiêu!',
+          body: 'Mục tiêu $goalTypeText đã được hoàn thành thành công!',
+          goalDetails: goalDetails,
+        );
         _stopWorkout(); // Tự động dừng nếu đạt mục tiêu
       }
     });
   }
 
-  /// Bắt đầu lắng nghe tín hiệu GPS
+  /// Lọc và làm mịn điểm GPS để loại bỏ nhiễu
+  List<LatLng> _filterAndSmoothRoutePoints(List<LatLng> points) {
+    if (points.length < 3) return points; // Cần ít nhất 3 điểm để làm mịn
+
+    final List<LatLng> filtered = [points.first]; // Luôn giữ điểm đầu
+
+    for (int i = 1; i < points.length - 1; i++) {
+      final prev = points[i - 1]; // Sử dụng điểm gốc, không phải điểm đã lọc
+      final curr = points[i];
+      final next = points[i + 1];
+
+      // Tính khoảng cách từ điểm trước (trong danh sách gốc)
+      final distanceFromPrev = Geolocator.distanceBetween(
+        prev.latitude,
+        prev.longitude,
+        curr.latitude,
+        curr.longitude,
+      );
+
+      // Bỏ qua điểm nếu quá xa (GPS nhiễu)
+      if (distanceFromPrev > _maxDistancePerUpdate) {
+        continue;
+      }
+
+      // Bỏ qua điểm nếu quá gần (tối ưu hiệu năng) - chỉ áp dụng sau điểm đầu tiên
+      if (distanceFromPrev < _minDistanceForUpdate && i > 1) {
+        continue;
+      }
+
+      // Làm mịn bằng cách lấy trung bình của 3 điểm liên tiếp (moving average)
+      final smoothedLat = (prev.latitude + curr.latitude + next.latitude) / 3;
+      final smoothedLng =
+          (prev.longitude + curr.longitude + next.longitude) / 3;
+
+      filtered.add(LatLng(smoothedLat, smoothedLng));
+    }
+
+    // Luôn giữ điểm cuối
+    if (points.length > 1) {
+      filtered.add(points.last);
+    }
+
+    return filtered;
+  }
+
+  /// Bắt đầu lắng nghe tín hiệu GPS với bộ lọc cải tiến
   void _listenToGPS() {
     _positionStreamSubscription?.cancel(); // Hủy stream cũ nếu có
     _positionStreamSubscription =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-          ), // Cập nhật sau mỗi 10m
+            distanceFilter: 10, // Giảm xuống 5m để có độ chính xác cao hơn
+          ),
         ).listen((Position position) {
           if (!_isTracking || !mounted)
             return; // Bỏ qua nếu đang tạm dừng hoặc widget đã bị hủy
@@ -233,6 +313,21 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 newPoint.latitude,
                 newPoint.longitude,
               );
+
+              // Bỏ qua điểm nếu quá xa (GPS nhiễu - có thể do tín hiệu yếu)
+              if (segmentDistance > _maxDistancePerUpdate) {
+                print(
+                  '⚠️ Bỏ qua điểm GPS nhiễu: khoảng cách = ${segmentDistance.toStringAsFixed(1)}m',
+                );
+                return;
+              }
+
+              // Chỉ cập nhật nếu di chuyển đủ xa (tối ưu hiệu năng)
+              if (segmentDistance < _minDistanceForUpdate &&
+                  _routePoints.length > 1) {
+                return;
+              }
+
               _totalDistance += segmentDistance;
             }
 
@@ -241,19 +336,27 @@ class _TrackingScreenState extends State<TrackingScreen> {
               RoutePointWithTime(point: newPoint, timestamp: currentTime),
             ); // Lưu với timestamp
 
-            // Cập nhật đường vẽ trên bản đồ
-            _polylines.clear(); // Xóa đường cũ (cách đơn giản nhất)
-            _polylines.add(
-              Polyline(
-                polylineId: const PolylineId('route'),
-                points: _routePoints,
-                color: Theme.of(context).colorScheme.primary,
-                width: 5,
-              ),
-            );
+            // Làm mịn và cập nhật đường vẽ trên bản đồ
+            final smoothedPoints = _filterAndSmoothRoutePoints(_routePoints);
 
-            // Di chuyển camera theo vị trí mới
-            _mapController?.animateCamera(CameraUpdate.newLatLng(newPoint));
+            _polylines.clear();
+            if (smoothedPoints.length >= 2) {
+              _polylines.add(
+                Polyline(
+                  polylineId: const PolylineId('route'),
+                  points: smoothedPoints,
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 5,
+                  patterns: [], // Đường liền nét
+                  jointType: JointType.round, // Làm mượt các góc
+                ),
+              );
+            }
+
+            // Di chuyển camera theo vị trí mới (chỉ khi có đủ điểm)
+            if (_routePoints.length > 1) {
+              _mapController?.animateCamera(CameraUpdate.newLatLng(newPoint));
+            }
           });
         });
   }

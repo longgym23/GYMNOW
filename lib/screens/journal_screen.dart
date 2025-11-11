@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gym_now/models/food_model.dart';
 import 'package:gym_now/models/nutrition_goal_model.dart';
+import 'package:gym_now/services/notification_service.dart';
 import 'package:intl/intl.dart';
 
 class JournalScreen extends StatefulWidget {
@@ -15,6 +17,8 @@ class JournalScreen extends StatefulWidget {
 
 class _JournalScreenState extends State<JournalScreen> {
   DateTime _selectedDay = DateTime.now();
+  final NotificationService _notificationService = NotificationService();
+  bool _hasShownNotification = false; // Tránh spam notification
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _logStream() {
     final user = FirebaseAuth.instance.currentUser;
@@ -207,26 +211,34 @@ class _JournalScreenState extends State<JournalScreen> {
         _selectedDay.day == DateTime.now().day;
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0D1B2A), // Màu đồng nhất với app
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFF0D1B2A), // Màu status bar đồng nhất
+          statusBarIconBrightness: Brightness.light, // Icon màu trắng
+          statusBarBrightness: Brightness.dark, // Dark cho Android
+        ),
+        elevation: 0, // Bỏ shadow để đồng nhất
+        surfaceTintColor: Colors.transparent, // Loại bỏ màu xám khi scroll
         leading: IconButton(icon: const Icon(Icons.menu), onPressed: () {}),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             IconButton(
               icon: const Icon(Icons.chevron_left),
-              onPressed: () => setState(
-                () => _selectedDay = _selectedDay.subtract(
-                  const Duration(days: 1),
-                ),
-              ),
+              onPressed: () => setState(() {
+                _selectedDay = _selectedDay.subtract(const Duration(days: 1));
+                _hasShownNotification = false; // Reset khi đổi ngày
+              }),
             ),
             Text(
               isToday ? 'Hôm nay' : DateFormat('dd/MM').format(_selectedDay),
             ),
             IconButton(
               icon: const Icon(Icons.chevron_right),
-              onPressed: () => setState(
-                () => _selectedDay = _selectedDay.add(const Duration(days: 1)),
-              ),
+              onPressed: () => setState(() {
+                _selectedDay = _selectedDay.add(const Duration(days: 1));
+                _hasShownNotification = false; // Reset khi đổi ngày
+              }),
             ),
           ],
         ),
@@ -341,93 +353,126 @@ class _JournalScreenState extends State<JournalScreen> {
                   final hasAnyOver =
                       isOverCal || isOverProtein || isOverCarbs || isOverFat;
 
+                  // Gửi notification khi vượt quá mục tiêu (chỉ một lần mỗi ngày)
+                  if (hasAnyOver && !_hasShownNotification && isToday) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) async {
+                      await _notificationService.initialize();
+                      final excessDetails = <String, double>{};
+                      if (isOverCal) {
+                        excessDetails['Calo'] = totals['calories']! - targetCal;
+                      }
+                      if (isOverProtein) {
+                        excessDetails['Protein'] =
+                            totals['protein']! - targetProtein;
+                      }
+                      if (isOverCarbs) {
+                        excessDetails['Carbs'] = totals['carbs']! - targetCarbs;
+                      }
+                      if (isOverFat) {
+                        excessDetails['Fat'] = totals['fat']! - targetFat;
+                      }
+
+                      await _notificationService.showGoalExceededNotification(
+                        title: '⚠️ Cảnh báo: Vượt quá mục tiêu',
+                        body: 'Bạn đã vượt quá mục tiêu dinh dưỡng hôm nay',
+                        excessDetails: excessDetails,
+                      );
+
+                      if (mounted) {
+                        setState(() {
+                          _hasShownNotification = true;
+                        });
+                      }
+                    });
+                  }
+
                   return Column(
                     children: [
-                      // Banner cảnh báo nếu có macro vượt quá
-                      if (hasAnyOver)
-                        Container(
-                          margin: const EdgeInsets.all(16),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.red.withOpacity(0.2),
-                                Colors.orange.withOpacity(0.1),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.red.withOpacity(0.5),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.red.withOpacity(0.3),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: Colors.red,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Cảnh báo: Vượt quá mục tiêu',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.red,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 4,
-                                      children: [
-                                        if (isOverCal)
-                                          _buildWarningChip(
-                                            'Calo',
-                                            totals['calories']! - targetCal,
-                                          ),
-                                        if (isOverProtein)
-                                          _buildWarningChip(
-                                            'Protein',
-                                            totals['protein']! - targetProtein,
-                                          ),
-                                        if (isOverCarbs)
-                                          _buildWarningChip(
-                                            'Carbs',
-                                            totals['carbs']! - targetCarbs,
-                                          ),
-                                        if (isOverFat)
-                                          _buildWarningChip(
-                                            'Fat',
-                                            totals['fat']! - targetFat,
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      // Banner cảnh báo nếu có macro vượt quá - TẠM THỜI ẨN ĐỂ TIẾT KIỆM KHÔNG GIAN
+                      // if (hasAnyOver)
+                      //   Container(
+                      //     margin: const EdgeInsets.all(16),
+                      //     padding: const EdgeInsets.all(16),
+                      //     decoration: BoxDecoration(
+                      //       gradient: LinearGradient(
+                      //         colors: [
+                      //           Colors.red.withOpacity(0.2),
+                      //           Colors.orange.withOpacity(0.1),
+                      //         ],
+                      //       ),
+                      //       borderRadius: BorderRadius.circular(16),
+                      //       border: Border.all(
+                      //         color: Colors.red.withOpacity(0.5),
+                      //         width: 2,
+                      //       ),
+                      //       boxShadow: [
+                      //         BoxShadow(
+                      //           color: Colors.red.withOpacity(0.3),
+                      //           blurRadius: 10,
+                      //           offset: const Offset(0, 4),
+                      //         ),
+                      //       ],
+                      //     ),
+                      //     child: Row(
+                      //       children: [
+                      //         Container(
+                      //           padding: const EdgeInsets.all(10),
+                      //           decoration: BoxDecoration(
+                      //             color: Colors.red.withOpacity(0.2),
+                      //             shape: BoxShape.circle,
+                      //           ),
+                      //           child: const Icon(
+                      //             Icons.warning_amber_rounded,
+                      //             color: Colors.red,
+                      //             size: 28,
+                      //           ),
+                      //         ),
+                      //         const SizedBox(width: 12),
+                      //         Expanded(
+                      //           child: Column(
+                      //             crossAxisAlignment: CrossAxisAlignment.start,
+                      //             children: [
+                      //               const Text(
+                      //                 'Cảnh báo: Vượt quá mục tiêu',
+                      //                 style: TextStyle(
+                      //                   fontSize: 16,
+                      //                   fontWeight: FontWeight.bold,
+                      //                   color: Colors.red,
+                      //                 ),
+                      //               ),
+                      //               const SizedBox(height: 6),
+                      //               Wrap(
+                      //                 spacing: 8,
+                      //                 runSpacing: 4,
+                      //                 children: [
+                      //                   if (isOverCal)
+                      //                     _buildWarningChip(
+                      //                       'Calo',
+                      //                       totals['calories']! - targetCal,
+                      //                     ),
+                      //                   if (isOverProtein)
+                      //                     _buildWarningChip(
+                      //                       'Protein',
+                      //                       totals['protein']! - targetProtein,
+                      //                     ),
+                      //                   if (isOverCarbs)
+                      //                     _buildWarningChip(
+                      //                       'Carbs',
+                      //                       totals['carbs']! - targetCarbs,
+                      //                     ),
+                      //                   if (isOverFat)
+                      //                     _buildWarningChip(
+                      //                       'Fat',
+                      //                       totals['fat']! - targetFat,
+                      //                     ),
+                      //                 ],
+                      //               ),
+                      //             ],
+                      //           ),
+                      //         ),
+                      //       ],
+                      //     ),
+                      //   ),
                       // Nutrition Summary - Compact 2x2 Grid Layout
                       Padding(
                         padding: const EdgeInsets.symmetric(
@@ -508,7 +553,9 @@ class _JournalScreenState extends State<JournalScreen> {
                           ],
                         ),
                       ),
-                      const Divider(height: 1),
+                      const SizedBox(
+                        height: 1,
+                      ), // Thay Divider bằng SizedBox để loại bỏ gạch chân
                       // Timeline
                       Expanded(
                         child: ListView.builder(

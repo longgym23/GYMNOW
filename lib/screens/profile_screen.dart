@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:gym_now/models/user_model.dart'; // Thêm import này
 import 'package:gym_now/screens/admin_panel_screen.dart';
@@ -22,7 +23,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Hồ sơ của bạn')),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0D1B2A), // Màu đồng nhất với app
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFF0D1B2A), // Màu status bar đồng nhất
+          statusBarIconBrightness: Brightness.light, // Icon màu trắng
+          statusBarBrightness: Brightness.dark, // Dark cho Android
+        ),
+        elevation: 0, // Bỏ shadow để đồng nhất
+        surfaceTintColor: Colors.transparent, // Loại bỏ màu xám khi scroll
+        title: const Text('Hồ sơ của bạn'),
+      ),
       body: FutureBuilder(
         future: DatabaseService(uid: user!.uid).getUserData(),
         builder: (context, snapshot) {

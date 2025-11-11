@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gym_now/screens/chat_screen.dart'; // **<-- THÊM IMPORT NÀY**
 import 'package:gym_now/screens/select_activity_screen.dart';
 import 'package:gym_now/services/database_service.dart';
@@ -194,6 +195,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0D1B2A), // Màu đồng nhất với app
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFF0D1B2A), // Màu status bar đồng nhất
+          statusBarIconBrightness: Brightness.light, // Icon màu trắng
+          statusBarBrightness: Brightness.dark, // Dark cho Android
+        ),
+        elevation: 0, // Bỏ shadow để đồng nhất
+        surfaceTintColor: Colors.transparent, // Loại bỏ màu xám khi scroll
         title: const Text('Trang chủ'),
         automaticallyImplyLeading: false, // Ẩn nút back
       ),
