@@ -80,12 +80,13 @@ class _NetworkBannerState extends State<NetworkBanner> {
                   children: [
                     const Icon(Icons.wifi_off, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'Không có mạng, vui lòng kết nối internet',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none, // Loại bỏ gạch chân
                       ),
                     ),
                   ],

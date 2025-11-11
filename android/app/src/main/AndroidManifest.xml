@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application
-        android:label="gym_now"
+        android:label="GYMNOW"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
