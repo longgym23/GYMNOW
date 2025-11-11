@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gym_now/models/food_model.dart';
 import 'package:gym_now/screens/food_detail_screen.dart';
 import 'package:gym_now/screens/food_analyzer_screen.dart';
@@ -160,9 +161,19 @@ class _NutritionScreenState extends State<NutritionScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0D1B2A), // Màu đồng nhất với app
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFF0D1B2A), // Màu status bar đồng nhất
+          statusBarIconBrightness: Brightness.light, // Icon màu trắng
+          statusBarBrightness: Brightness.dark, // Dark cho Android
+        ),
+        elevation: 0, // Bỏ shadow để đồng nhất
+        surfaceTintColor: Colors.transparent, // Loại bỏ màu xám khi scroll
         title: const Text('Dinh dưỡng'),
         bottom: TabBar(
           controller: _tabController,
+          dividerColor: Colors.transparent, // Loại bỏ gạch chân trắng
+          dividerHeight: 0, // Đảm bảo không có divider
           tabs: const [
             Tab(text: 'Món ăn'),
             Tab(text: 'Thực đơn của bạn'),
@@ -264,6 +275,18 @@ class _NutritionScreenState extends State<NutritionScreen>
                                 : null,
                             filled: false,
                             border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30.0),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30.0),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30.0),
+                              borderSide: BorderSide.none,
+                            ),
+                            disabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30.0),
                               borderSide: BorderSide.none,
                             ),

@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+// import 'dart:math' as math; // No longer needed after removing km markers
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
@@ -20,7 +21,7 @@ class WorkoutDetailScreen extends StatefulWidget {
 
 class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   final Set<Polyline> _polylines = {};
-  final Set<Marker> _markers = {};
+  final Set<Marker> _segmentMarkers = {};
   GoogleMapController? _mapController; // Không cần 'late'
   final LatLng _defaultLocation = const LatLng(
     10.762622,
@@ -29,6 +30,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   bool _isPolylineCreated = false;
   LatLngBounds? _routeBounds; // Lưu bounds để zoom
   List<RouteSegment>? _routeSegments; // Lưu thông tin vận tốc các cung đường
+  bool _showSpeedMarkers = false; // Bật/tắt các số đánh dấu vận tốc
 
   @override
   void didChangeDependencies() {
@@ -84,6 +86,8 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
         _polylines.add(polyline);
       });
     }
+
+    // Segment markers (có số + vận tốc) sẽ hiển thị theo toggle _showSpeedMarkers
   }
 
   /// Tạo các polyline với màu sắc khác nhau dựa trên vận tốc
@@ -181,9 +185,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       markers.add(marker);
     }
 
-    setState(() {
-      _markers.addAll(markers);
-    });
+    setState(() => _segmentMarkers.addAll(markers));
   }
 
   /// Tạo custom marker icon với số và vận tốc
@@ -510,6 +512,20 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
       appBar: AppBar(
         title: Text(data['activityType'] ?? 'Chi tiết buổi tập'),
         actions: [
+          IconButton(
+            tooltip: _showSpeedMarkers
+                ? 'Ẩn số đánh dấu vận tốc'
+                : 'Hiển thị số đánh dấu vận tốc',
+            icon: Icon(
+              _showSpeedMarkers ? Icons.speed : Icons.speed_outlined,
+              color: Colors.orangeAccent,
+            ),
+            onPressed: () {
+              setState(() {
+                _showSpeedMarkers = !_showSpeedMarkers;
+              });
+            },
+          ),
           CupertinoButton(
             padding: EdgeInsets.zero,
             minSize: 0,
@@ -609,7 +625,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                     zoom: 14,
                   ),
                   polylines: _polylines,
-                  markers: _markers,
+                  markers: _showSpeedMarkers ? _segmentMarkers : {},
                   onMapCreated: _onMapCreated,
                   myLocationButtonEnabled: false,
                   zoomControlsEnabled: false,
