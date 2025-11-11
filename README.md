@@ -4,7 +4,7 @@
     </a>
 </h2>
 <h2 align="center">
-   GIẢI PHÁP CHUYỂN ĐỔI SỐ TRONG THEO DÕI LUYỆN TẬP THỂ THAO VÀ DINH DƯỠNG CÁ NHÂN
+   GIẢI PHÁP CHUYỂN ĐỔI SỐ TRONG THEO DÕI LUYỆN TẬP THỂ THAO VÀ DINH DƯỠNG CÁ NHÂN GYMNOW
 </h2>
 <div align="center">
     <p align="center">
