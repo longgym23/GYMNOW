@@ -785,6 +785,18 @@ class _ChatScreenState extends State<ChatScreen> {
                             horizontal: 20.0,
                             vertical: 14.0,
                           ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30.0),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30.0),
+                            borderSide: BorderSide.none,
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30.0),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                         style: const TextStyle(
                           color: Colors.white,
