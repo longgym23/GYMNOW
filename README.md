@@ -244,7 +244,7 @@ flutter run
 
 - Giao diện Chatbot PT AI và phân tích hình ảnh:
     <p align="center">
-    <img src="assets/images/chatbotAI.png" alt="Chatbot PT AI" width="130"/>
+    <img src="assets/images/chatbotAi.png" alt="Chatbot PT AI" width="130"/>
     <img src="assets/images/phantich.png" alt="Nutrition Screen" width="130"/>
     </p>
 - Giao diện nhật kí và hồ sơ
