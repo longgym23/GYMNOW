@@ -32,7 +32,8 @@ class TrackingScreen extends StatefulWidget {
   State<TrackingScreen> createState() => _TrackingScreenState();
 }
 
-class _TrackingScreenState extends State<TrackingScreen> {
+class _TrackingScreenState extends State<TrackingScreen>
+    with WidgetsBindingObserver {
   // === BIẾN TRẠNG THÁI ===
   bool _isStarted = false;
   WorkoutGoal _workoutGoal = WorkoutGoal();
@@ -63,6 +64,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(
+      this,
+    ); // Đăng ký observer để theo dõi lifecycle
     _fetchUserWeight();
     _getCurrentLocationAndWeather();
   }
@@ -150,11 +154,30 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   /// Bắt đầu toàn bộ buổi tập (sau khi nhấn GO)
   void _beginWorkout() async {
+    // Kiểm tra và yêu cầu quyền location
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) return;
+    }
+
+    // Kiểm tra và yêu cầu quyền background location (Android)
+    if (permission == LocationPermission.whileInUse) {
+      final backgroundPermission = await Geolocator.checkPermission();
+      if (backgroundPermission != LocationPermission.always) {
+        // Yêu cầu quyền background location
+        final newPermission = await Geolocator.requestPermission();
+        if (newPermission != LocationPermission.always &&
+            newPermission != LocationPermission.whileInUse) {
+          _showIOSNotification(
+            context,
+            'Cần quyền truy cập vị trí để theo dõi quãng đường khi màn hình tắt.',
+            isError: true,
+          );
+          return;
+        }
+      }
     }
 
     // Đảm bảo cân nặng hợp lệ
@@ -291,74 +314,96 @@ class _TrackingScreenState extends State<TrackingScreen> {
   /// Bắt đầu lắng nghe tín hiệu GPS với bộ lọc cải tiến
   void _listenToGPS() {
     _positionStreamSubscription?.cancel(); // Hủy stream cũ nếu có
+
+    // Cấu hình LocationSettings - cho phép tracking khi app ở background
+    final locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10, // Cập nhật mỗi 10m
+    );
+
     _positionStreamSubscription =
         Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10, // Giảm xuống 5m để có độ chính xác cao hơn
-          ),
+          locationSettings: locationSettings,
         ).listen((Position position) {
-          if (!_isTracking || !mounted)
-            return; // Bỏ qua nếu đang tạm dừng hoặc widget đã bị hủy
+          if (!_isTracking) {
+            // Vẫn lưu dữ liệu ngay cả khi app ở background (không gọi setState)
+            // Điều này đảm bảo quãng đường vẫn được ghi lại
+            _updateLocationData(position, updateUI: false);
+            return;
+          }
 
-          setState(() {
-            final newPoint = LatLng(position.latitude, position.longitude);
-            final currentTime = DateTime.now();
+          if (!mounted) {
+            // Nếu widget đã bị dispose, vẫn lưu dữ liệu nhưng không update UI
+            _updateLocationData(position, updateUI: false);
+            return;
+          }
 
-            if (_routePoints.isNotEmpty) {
-              // Tính khoảng cách từ điểm cuối cùng
-              final segmentDistance = Geolocator.distanceBetween(
-                _routePoints.last.latitude,
-                _routePoints.last.longitude,
-                newPoint.latitude,
-                newPoint.longitude,
-              );
-
-              // Bỏ qua điểm nếu quá xa (GPS nhiễu - có thể do tín hiệu yếu)
-              if (segmentDistance > _maxDistancePerUpdate) {
-                print(
-                  '⚠️ Bỏ qua điểm GPS nhiễu: khoảng cách = ${segmentDistance.toStringAsFixed(1)}m',
-                );
-                return;
-              }
-
-              // Chỉ cập nhật nếu di chuyển đủ xa (tối ưu hiệu năng)
-              if (segmentDistance < _minDistanceForUpdate &&
-                  _routePoints.length > 1) {
-                return;
-              }
-
-              _totalDistance += segmentDistance;
-            }
-
-            _routePoints.add(newPoint); // Thêm điểm mới vào danh sách
-            _routePointsWithTime.add(
-              RoutePointWithTime(point: newPoint, timestamp: currentTime),
-            ); // Lưu với timestamp
-
-            // Làm mịn và cập nhật đường vẽ trên bản đồ
-            final smoothedPoints = _filterAndSmoothRoutePoints(_routePoints);
-
-            _polylines.clear();
-            if (smoothedPoints.length >= 2) {
-              _polylines.add(
-                Polyline(
-                  polylineId: const PolylineId('route'),
-                  points: smoothedPoints,
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 5,
-                  patterns: [], // Đường liền nét
-                  jointType: JointType.round, // Làm mượt các góc
-                ),
-              );
-            }
-
-            // Di chuyển camera theo vị trí mới (chỉ khi có đủ điểm)
-            if (_routePoints.length > 1) {
-              _mapController?.animateCamera(CameraUpdate.newLatLng(newPoint));
-            }
-          });
+          // App đang ở foreground - update cả dữ liệu và UI
+          _updateLocationData(position, updateUI: true);
         });
+  }
+
+  /// Cập nhật dữ liệu vị trí (có thể update UI hoặc không)
+  void _updateLocationData(Position position, {required bool updateUI}) {
+    final newPoint = LatLng(position.latitude, position.longitude);
+    final currentTime = DateTime.now();
+
+    if (_routePoints.isNotEmpty) {
+      // Tính khoảng cách từ điểm cuối cùng
+      final segmentDistance = Geolocator.distanceBetween(
+        _routePoints.last.latitude,
+        _routePoints.last.longitude,
+        newPoint.latitude,
+        newPoint.longitude,
+      );
+
+      // Bỏ qua điểm nếu quá xa (GPS nhiễu - có thể do tín hiệu yếu)
+      if (segmentDistance > _maxDistancePerUpdate) {
+        print(
+          '⚠️ Bỏ qua điểm GPS nhiễu: khoảng cách = ${segmentDistance.toStringAsFixed(1)}m',
+        );
+        return;
+      }
+
+      // Chỉ cập nhật nếu di chuyển đủ xa (tối ưu hiệu năng)
+      if (segmentDistance < _minDistanceForUpdate && _routePoints.length > 1) {
+        return;
+      }
+
+      _totalDistance += segmentDistance;
+    }
+
+    _routePoints.add(newPoint); // Thêm điểm mới vào danh sách
+    _routePointsWithTime.add(
+      RoutePointWithTime(point: newPoint, timestamp: currentTime),
+    ); // Lưu với timestamp
+
+    // Chỉ update UI nếu app đang ở foreground
+    if (updateUI && mounted) {
+      setState(() {
+        // Làm mịn và cập nhật đường vẽ trên bản đồ
+        final smoothedPoints = _filterAndSmoothRoutePoints(_routePoints);
+
+        _polylines.clear();
+        if (smoothedPoints.length >= 2) {
+          _polylines.add(
+            Polyline(
+              polylineId: const PolylineId('route'),
+              points: smoothedPoints,
+              color: Theme.of(context).colorScheme.primary,
+              width: 5,
+              patterns: [], // Đường liền nét
+              jointType: JointType.round, // Làm mượt các góc
+            ),
+          );
+        }
+
+        // Di chuyển camera theo vị trí mới (chỉ khi có đủ điểm)
+        if (_routePoints.length > 1) {
+          _mapController?.animateCamera(CameraUpdate.newLatLng(newPoint));
+        }
+      });
+    }
   }
 
   /// Chuyển đổi trạng thái Tạm dừng / Tiếp tục
@@ -823,8 +868,38 @@ class _TrackingScreenState extends State<TrackingScreen> {
     return widget.activityType.metValue;
   }
 
+  /// Xử lý lifecycle của app (khi đi vào background/foreground)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (!_isStarted || !_isTracking) return; // Chỉ xử lý khi đang tracking
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        // App quay lại foreground - đảm bảo GPS vẫn chạy
+        if (_positionStreamSubscription == null ||
+            _positionStreamSubscription!.isPaused) {
+          _listenToGPS(); // Khởi động lại nếu bị tạm dừng
+        }
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        // App đi vào background - GPS vẫn tiếp tục chạy nhờ cấu hình LocationSettings
+        // Không cần làm gì, LocationSettings đã được cấu hình để chạy background
+        break;
+      case AppLifecycleState.detached:
+        // App bị đóng hoàn toàn
+        break;
+      case AppLifecycleState.hidden:
+        // App bị ẩn (Android 14+)
+        break;
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Hủy đăng ký observer
     _positionStreamSubscription?.cancel();
     _timer?.cancel();
     _mapController?.dispose(); // Giải phóng controller của map
