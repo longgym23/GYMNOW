@@ -3,5 +3,6 @@ serviceAccountKey.json
 BUILD_GUIDE.md
 README_EMAIL_SETUP.md
 SENDGRID_SETUP.md
+README_tracking_algorithms.md
 # Thư mục chứa các thư viện đã cài đặt
 node_modules/
