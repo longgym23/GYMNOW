@@ -1,0 +1,31 @@
+{
+  "name": "gym_now_backend",
+  "version": "1.0.0",
+  "description": "Backend server for GymNow app - Express server with Firebase Admin, Gemini AI, and SendGrid email",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "gym",
+    "fitness",
+    "backend",
+    "express",
+    "firebase",
+    "gemini"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
+
