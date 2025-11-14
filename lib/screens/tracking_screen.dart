@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -43,6 +44,7 @@ class _TrackingScreenState extends State<TrackingScreen>
   double _totalDistance = 0.0;
   double _caloriesBurned = 0.0;
   double _userWeight = 70.0;
+  bool _isAppInForeground = true;
   GoogleMapController? _mapController;
   final List<LatLng> _routePoints = [];
   final List<RoutePointWithTime> _routePointsWithTime =
@@ -153,30 +155,50 @@ class _TrackingScreenState extends State<TrackingScreen>
   }
 
   /// Bắt đầu toàn bộ buổi tập (sau khi nhấn GO)
-  void _beginWorkout() async {
+  Future<void> _beginWorkout() async {
+    // Kiểm tra dịch vụ định vị đã bật chưa
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _showIOSNotification(
+        context,
+        'Hãy bật GPS để bắt đầu theo dõi quãng đường.',
+        isError: true,
+      );
+      return;
+    }
+
     // Kiểm tra và yêu cầu quyền location
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return;
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _showIOSNotification(
+          context,
+          'Ứng dụng cần quyền truy cập vị trí để ghi lại quãng đường.',
+          isError: true,
+        );
+        return;
+      }
     }
 
     // Kiểm tra và yêu cầu quyền background location (Android)
-    if (permission == LocationPermission.whileInUse) {
-      final backgroundPermission = await Geolocator.checkPermission();
-      if (backgroundPermission != LocationPermission.always) {
-        // Yêu cầu quyền background location
+    if (Platform.isAndroid && permission == LocationPermission.whileInUse) {
+      try {
         final newPermission = await Geolocator.requestPermission();
         if (newPermission != LocationPermission.always &&
             newPermission != LocationPermission.whileInUse) {
           _showIOSNotification(
             context,
-            'Cần quyền truy cập vị trí để theo dõi quãng đường khi màn hình tắt.',
+            'Cần cấp quyền "Always" để tiếp tục theo dõi khi màn hình tắt.',
             isError: true,
           );
           return;
         }
+        permission = newPermission;
+      } catch (e) {
+        debugPrint('Không thể yêu cầu quyền background location: $e');
       }
     }
 
@@ -316,31 +338,43 @@ class _TrackingScreenState extends State<TrackingScreen>
     _positionStreamSubscription?.cancel(); // Hủy stream cũ nếu có
 
     // Cấu hình LocationSettings - cho phép tracking khi app ở background
-    final locationSettings = LocationSettings(
+    LocationSettings locationSettings = const LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 10, // Cập nhật mỗi 10m
     );
 
+    if (Platform.isAndroid) {
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+        intervalDuration: const Duration(seconds: 5),
+        foregroundNotificationConfig: ForegroundNotificationConfig(
+          notificationText: 'Ứng dụng đang theo dõi quãng đường của bạn.',
+          notificationTitle: 'GYMNOW - Đang tập luyện',
+          setOngoing: true,
+          enableWakeLock: true,
+        ),
+      );
+    } else if (Platform.isIOS) {
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+        pauseLocationUpdatesAutomatically: false,
+        allowBackgroundLocationUpdates: true,
+        showBackgroundLocationIndicator: true,
+        activityType: ActivityType.fitness,
+      );
+    }
+
     _positionStreamSubscription =
-        Geolocator.getPositionStream(
-          locationSettings: locationSettings,
-        ).listen((Position position) {
-          if (!_isTracking) {
-            // Vẫn lưu dữ liệu ngay cả khi app ở background (không gọi setState)
-            // Điều này đảm bảo quãng đường vẫn được ghi lại
-            _updateLocationData(position, updateUI: false);
-            return;
-          }
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (Position position) {
+            if (!_isTracking) return;
 
-          if (!mounted) {
-            // Nếu widget đã bị dispose, vẫn lưu dữ liệu nhưng không update UI
-            _updateLocationData(position, updateUI: false);
-            return;
-          }
-
-          // App đang ở foreground - update cả dữ liệu và UI
-          _updateLocationData(position, updateUI: true);
-        });
+            final shouldUpdateUI = mounted && _isAppInForeground;
+            _updateLocationData(position, updateUI: shouldUpdateUI);
+          },
+        );
   }
 
   /// Cập nhật dữ liệu vị trí (có thể update UI hoặc không)
@@ -872,6 +906,8 @@ class _TrackingScreenState extends State<TrackingScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+
+    _isAppInForeground = state == AppLifecycleState.resumed;
 
     if (!_isStarted || !_isTracking) return; // Chỉ xử lý khi đang tracking
 

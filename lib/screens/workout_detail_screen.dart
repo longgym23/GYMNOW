@@ -132,53 +132,216 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     }
   }
 
-  /// Tạo markers cho mỗi cung đường với số thứ tự và vận tốc
+  /// Tính tổng quãng đường từ các segments
+  double _calculateTotalDistance() {
+    if (_routeSegments == null || _routeSegments!.isEmpty) return 0.0;
+    return _routeSegments!
+        .map((s) => s.distanceMeters)
+        .fold(0.0, (sum, distance) => sum + distance);
+  }
+
+  /// Xác định khoảng cách giữa các marker dựa trên tổng quãng đường
+  /// Trả về khoảng cách (mét) và số lượng marker tối đa
+  Map<String, dynamic> _determineMarkerInterval(double totalDistance) {
+    // Giới hạn số lượng marker tối đa để tránh lag
+    const int maxMarkers = 25;
+
+    double interval;
+
+    if (totalDistance < 500) {
+      // Quãng đường rất ngắn: không đánh dấu hoặc chỉ đánh dấu điểm cuối
+      return {'interval': totalDistance, 'maxMarkers': 1};
+    } else if (totalDistance < 2000) {
+      // 500m - 2km: đánh dấu mỗi 200-300m
+      interval = 250.0;
+    } else if (totalDistance < 5000) {
+      // 2km - 5km: đánh dấu mỗi 500m
+      interval = 500.0;
+    } else if (totalDistance < 10000) {
+      // 5km - 10km: đánh dấu mỗi 1km
+      interval = 1000.0;
+    } else {
+      // > 10km: đánh dấu mỗi 2km
+      interval = 1200.0;
+    }
+
+    // Điều chỉnh interval nếu số lượng marker vượt quá maxMarkers
+    final estimatedMarkers = (totalDistance / interval).ceil();
+    if (estimatedMarkers > maxMarkers) {
+      interval = totalDistance / maxMarkers;
+    }
+
+    return {'interval': interval, 'maxMarkers': maxMarkers};
+  }
+
+  /// Tạo markers cho mỗi khoảng cách hợp lý với số thứ tự và vận tốc trung bình
   Future<void> _createSegmentMarkers(List<LatLng> routeCoordinates) async {
     if (_routeSegments == null || _routeSegments!.isEmpty) return;
 
-    final Set<Marker> markers = {};
+    // Tính tổng quãng đường và xác định khoảng cách marker
+    final totalDistance = _calculateTotalDistance();
+    if (totalDistance < 500) {
+      // Quãng đường quá ngắn, chỉ đánh dấu điểm cuối nếu cần
+      return;
+    }
 
+    final markerConfig = _determineMarkerInterval(totalDistance);
+    final double markerInterval = markerConfig['interval'] as double;
+    final int maxMarkers = markerConfig['maxMarkers'] as int;
+
+    final List<Map<String, dynamic>> markerDataList = [];
+    double accumulatedDistance = 0.0; // Khoảng cách tích lũy
+    double nextMarkerDistance =
+        markerInterval; // Khoảng cách cho marker tiếp theo
+    int markerNumber = 1; // Số thứ tự marker
+
+    // Lưu thông tin các segment trong đoạn hiện tại
+    List<RouteSegment> currentSegmentGroup = [];
+
+    // Bước 1: Thu thập dữ liệu marker (không tạo icon ngay)
     for (
       int i = 0;
       i < _routeSegments!.length && i + 1 < routeCoordinates.length;
       i++
     ) {
       final segment = _routeSegments![i];
-      final startPoint = routeCoordinates[segment.index];
-      final endPoint = routeCoordinates[segment.index + 1];
+      final segmentDistance = segment.distanceMeters;
 
-      // Tính điểm giữa của cung đường
-      final midPoint = LatLng(
-        (startPoint.latitude + endPoint.latitude) / 2,
-        (startPoint.longitude + endPoint.longitude) / 2,
-      );
+      // Thêm segment vào nhóm hiện tại
+      currentSegmentGroup.add(segment);
+      accumulatedDistance += segmentDistance;
 
-      // Xác định màu dựa trên vận tốc
+      // Kiểm tra xem đã đạt khoảng cách marker chưa và chưa vượt quá số lượng tối đa
+      if (accumulatedDistance >= nextMarkerDistance &&
+          markerNumber <= maxMarkers) {
+        // Tính vận tốc trung bình cho đoạn này
+        double totalDistance = 0.0;
+        int totalDuration = 0;
+
+        for (var seg in currentSegmentGroup) {
+          totalDistance += seg.distanceMeters;
+          totalDuration += seg.durationSeconds;
+        }
+
+        // Tính vận tốc trung bình (km/h)
+        double avgSpeed = 0.0;
+        if (totalDuration > 0) {
+          avgSpeed = (totalDistance / totalDuration) * 3.6; // m/s -> km/h
+        } else if (currentSegmentGroup.isNotEmpty) {
+          // Nếu không có thời gian, lấy vận tốc trung bình của các segment
+          double sumSpeed = 0.0;
+          for (var seg in currentSegmentGroup) {
+            sumSpeed += seg.speedKmh;
+          }
+          avgSpeed = sumSpeed / currentSegmentGroup.length;
+        }
+
+        // Tìm điểm đặt marker (điểm cuối của đoạn)
+        final segmentIndex = currentSegmentGroup.last.index;
+        final markerPoint =
+            routeCoordinates[(segmentIndex + 1 < routeCoordinates.length)
+                ? segmentIndex + 1
+                : routeCoordinates.length - 1];
+
+        // Xác định màu dựa trên vận tốc trung bình
+        Color markerColor;
+        if (avgSpeed < 5) {
+          markerColor = Colors.blue;
+        } else if (avgSpeed < 15) {
+          markerColor = Colors.green;
+        } else if (avgSpeed < 25) {
+          markerColor = Colors.orange;
+        } else {
+          markerColor = Colors.red;
+        }
+
+        // Lưu dữ liệu marker để tạo sau
+        markerDataList.add({
+          'number': markerNumber,
+          'position': markerPoint,
+          'speed': avgSpeed,
+          'color': markerColor,
+          'distance': nextMarkerDistance,
+        });
+
+        // Reset cho marker tiếp theo
+        markerNumber++;
+        nextMarkerDistance += markerInterval;
+        currentSegmentGroup.clear();
+      }
+    }
+
+    // Tạo marker cuối cùng nếu còn dữ liệu chưa được đánh dấu và chưa vượt quá số lượng tối đa
+    if (currentSegmentGroup.isNotEmpty &&
+        routeCoordinates.isNotEmpty &&
+        markerNumber <= maxMarkers &&
+        accumulatedDistance > markerInterval * 0.5) {
+      // Chỉ tạo nếu còn ít nhất 50% khoảng cách
+      double totalDistance = 0.0;
+      int totalDuration = 0;
+
+      for (var seg in currentSegmentGroup) {
+        totalDistance += seg.distanceMeters;
+        totalDuration += seg.durationSeconds;
+      }
+
+      double avgSpeed = 0.0;
+      if (totalDuration > 0) {
+        avgSpeed = (totalDistance / totalDuration) * 3.6;
+      } else if (currentSegmentGroup.isNotEmpty) {
+        double sumSpeed = 0.0;
+        for (var seg in currentSegmentGroup) {
+          sumSpeed += seg.speedKmh;
+        }
+        avgSpeed = sumSpeed / currentSegmentGroup.length;
+      }
+
+      final lastPoint = routeCoordinates.last;
+
       Color markerColor;
-      if (segment.speedKmh < 5) {
+      if (avgSpeed < 5) {
         markerColor = Colors.blue;
-      } else if (segment.speedKmh < 15) {
+      } else if (avgSpeed < 15) {
         markerColor = Colors.green;
-      } else if (segment.speedKmh < 25) {
+      } else if (avgSpeed < 25) {
         markerColor = Colors.orange;
       } else {
         markerColor = Colors.red;
       }
 
-      // Tạo custom icon
+      // Lưu dữ liệu marker cuối cùng
+      markerDataList.add({
+        'number': markerNumber,
+        'position': lastPoint,
+        'speed': avgSpeed,
+        'color': markerColor,
+        'distance': accumulatedDistance,
+        'isLast': true,
+      });
+    }
+
+    // Bước 2: Tạo icon và marker một cách bất đồng bộ (tối ưu hiệu năng)
+    final Set<Marker> markers = {};
+    for (var markerData in markerDataList) {
       final icon = await _createCustomMarkerIcon(
-        segmentNumber: i + 1,
-        speed: segment.speedKmh,
-        color: markerColor,
+        segmentNumber: markerData['number'] as int,
+        speed: markerData['speed'] as double,
+        color: markerData['color'] as Color,
       );
 
+      final isLast = markerData['isLast'] as bool? ?? false;
+      final distance = markerData['distance'] as double;
+
       final marker = Marker(
-        markerId: MarkerId('segment_marker_$i'),
-        position: midPoint,
+        markerId: MarkerId('segment_marker_${markerData['number']}'),
+        position: markerData['position'] as LatLng,
         icon: icon,
         infoWindow: InfoWindow(
-          title: 'Cung đường ${i + 1}',
-          snippet: 'Vận tốc: ${segment.speedKmh.toStringAsFixed(1)} km/h',
+          title: isLast
+              ? 'Điểm cuối (${(distance / 1000).toStringAsFixed(1)} km)'
+              : 'Điểm ${markerData['number']} (${(distance / 1000).toStringAsFixed(1)} km)',
+          snippet:
+              'Vận tốc TB: ${(markerData['speed'] as double).toStringAsFixed(1)} km/h',
         ),
       );
 
