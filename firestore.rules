@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function: Kiểm tra user đã đăng nhập
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function: Kiểm tra user đang truy cập chính dữ liệu của mình
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function: Kiểm tra user có role là admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // ========== USERS COLLECTION ==========
+    match /users/{userId} {
+      // User có thể đọc/ghi dữ liệu của chính mình
+      allow read, write: if isOwner(userId);
+      
+      // Admin có thể đọc tất cả users
+      allow read: if isAdmin();
+      
+      // Cho phép tạo user document mới khi đăng ký
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // ========== WORKOUTS COLLECTION ==========
+    match /workouts/{userId}/sessions/{sessionId} {
+      // User chỉ có thể đọc/ghi workouts của chính mình
+      allow read, write: if isOwner(userId);
+      
+      // Admin có thể đọc/ghi tất cả workouts
+      allow read, write: if isAdmin();
+    }
+    
+    // ========== USER SUBCOLLECTIONS ==========
+    // User Meal Plans
+    match /users/{userId}/userMealPlans/{mealPlanId} {
+      allow read, write: if isOwner(userId);
+      allow read, write: if isAdmin();
+      
+      // Subcollection: days
+      match /days/{dayId} {
+        allow read, write: if isOwner(userId);
+        allow read, write: if isAdmin();
+      }
+    }
+    
+    // User Food Logs
+    match /users/{userId}/foodLogs/{logId} {
+      allow read, write: if isOwner(userId);
+      allow read, write: if isAdmin();
+    }
+    
+    // User Nutrition Goals
+    match /users/{userId}/nutritionGoals/{goalId} {
+      allow read, write: if isOwner(userId);
+      allow read, write: if isAdmin();
+    }
+    
+    // ========== FOODS COLLECTION (Public Read) ==========
+    // Collection công khai - mọi user đã đăng nhập đều có thể đọc
+    match /foods/{foodId} {
+      allow read: if isAuthenticated();
+      // Chỉ admin mới có thể thêm/sửa/xóa món ăn
+      allow write: if isAdmin();
+    }
+    
+    // ========== MEAL PLAN TEMPLATES COLLECTION (Public Read) ==========
+    // Collection công khai - mọi user đã đăng nhập đều có thể đọc
+    match /mealPlanTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      // Chỉ admin mới có thể thêm/sửa/xóa templates
+      allow write: if isAdmin();
+      
+      // Subcollection: days (nếu có)
+      match /days/{dayId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+      }
+    }
+    
+    // ========== CHATS COLLECTION ==========
+    match /chats/{userId}/messages/{messageId} {
+      // User chỉ có thể đọc/ghi messages của chính mình
+      allow read, write: if isOwner(userId);
+      
+      // Admin có thể đọc/ghi tất cả messages
+      allow read, write: if isAdmin();
+    }
+    
+    // Default: Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
