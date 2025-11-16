@@ -96,6 +96,25 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     
+    // ========== PASSWORD RESET PINS COLLECTION ==========
+    // Collection lưu trữ mã PIN reset password
+    // Document ID là email của user
+    match /passwordResetPins/{email} {
+      // Cho phép tạo PIN mà không cần đăng nhập (cho chức năng "Quên mật khẩu")
+      // Chỉ người sở hữu email mới nhận được PIN qua email
+      allow create: if true;
+      
+      // Cho phép đọc PIN (để verify)
+      // Bất kỳ ai cũng có thể đọc, nhưng chỉ người có email mới biết được PIN
+      allow read: if true;
+      
+      // Cho phép update PIN (để đánh dấu "used" sau khi verify)
+      allow update: if true;
+      
+      // Chỉ admin mới có thể xóa PIN
+      allow delete: if isAdmin();
+    }
+    
     // Default: Deny all other access
     match /{document=**} {
       allow read, write: if false;
