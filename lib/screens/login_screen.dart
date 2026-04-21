@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:gym_now/screens/main_navigator.dart';
 import 'package:gym_now/widgets/wave_clipper.dart';
 import 'package:gym_now/widgets/modern_text_field.dart';
-import 'package:gym_now/services/auth_service.dart';
 import 'package:gym_now/services/network_service.dart';
 import 'package:gym_now/screens/register_screen.dart';
 import 'package:gym_now/screens/forgot_password_screen.dart';
+import '../presentation/viewmodels/auth_viewmodel.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -16,13 +17,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final AuthService _auth = AuthService();
+  final AuthViewModel _authViewModel = Get.find<AuthViewModel>();
   final NetworkService _networkService = NetworkService();
   final _formKey = GlobalKey<FormState>();
+  
   String email = '';
   String password = '';
-  String error = '';
-  bool _isLoading = false;
   bool _obscureText = true;
   bool _isConnected = true;
   StreamSubscription<bool>? _networkSubscription;
@@ -31,9 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _networkService.initialize();
-    _networkSubscription = _networkService.connectionStatus.listen((
-      isConnected,
-    ) {
+    _networkSubscription = _networkService.connectionStatus.listen((isConnected) {
       if (mounted) {
         setState(() {
           _isConnected = isConnected;
@@ -63,7 +61,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Giao diện sóng giữ nguyên
           ClipPath(
             clipper: WaveClipperTop(),
             child: Container(
@@ -87,7 +84,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: Column(
                 children: [
-                  // Logo scroll cùng với nội dung
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Image.asset(
@@ -112,34 +108,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       children: <Widget>[
-                        // Email field với design hiện đại
                         ModernTextField(
                           label: 'Email',
                           prefixIcon: Icons.email_outlined,
                           keyboardType: TextInputType.emailAddress,
-                          validator: (val) =>
-                              val!.isEmpty ? 'Nhập email của bạn' : null,
-                          onChanged: (val) => setState(() => email = val),
+                          validator: (val) => val!.isEmpty ? 'Nhập email của bạn' : null,
+                          onChanged: (val) => email = val,
                         ),
                         const SizedBox(height: 24.0),
-                        // Password field với design hiện đại
                         ModernTextField(
                           label: 'Mật khẩu',
                           prefixIcon: Icons.lock_outline,
                           obscureText: _obscureText,
-                          validator: (val) => val!.length < 6
-                              ? 'Mật khẩu phải dài hơn 6 ký tự'
-                              : null,
-                          onChanged: (val) => setState(() => password = val),
+                          validator: (val) => val!.length < 6 ? 'Mật khẩu phải dài hơn 6 ký tự' : null,
+                          onChanged: (val) => password = val,
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscureText
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
+                              _obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                               color: Colors.grey[400],
                             ),
-                            onPressed: () =>
-                                setState(() => _obscureText = !_obscureText),
+                            onPressed: () => setState(() => _obscureText = !_obscureText),
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -147,13 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const ForgotPasswordScreen(),
-                                ),
-                              );
+                              Get.to(() => const ForgotPasswordScreen());
                             },
                             child: Text(
                               'Quên mật khẩu?',
@@ -162,101 +144,46 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 30.0),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            child: _isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white,
-                                  )
-                                : const Text(
-                                    'Đăng nhập',
-                                    style: TextStyle(fontSize: 18),
-                                  ),
-                            onPressed: _isLoading || !_isConnected
-                                ? null
-                                : () async {
-                                    // Kiểm tra mạng trước khi đăng nhập
-                                    final hasConnection = await _networkService
-                                        .checkInternetConnection();
-                                    if (!hasConnection) {
-                                      setState(() {
-                                        _isConnected = false;
-                                        error =
-                                            'Không có kết nối mạng. Vui lòng kiểm tra internet và thử lại.';
-                                      });
-                                      return;
-                                    }
-
-                                    if (_formKey.currentState!.validate()) {
-                                      setState(() {
-                                        _isLoading = true;
-                                        error = '';
-                                      });
-                                      dynamic result = await _auth
-                                          .signInWithEmailAndPassword(
-                                            email,
-                                            password,
-                                          );
-
-                                      // Dừng loading sau khi có kết quả
-                                      if (mounted) {
-                                        setState(() => _isLoading = false);
+                        Obx(() {
+                          return SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _authViewModel.isLoading.value || !_isConnected
+                                  ? null
+                                  : () async {
+                                      final hasConnection = await _networkService.checkInternetConnection();
+                                      if (!hasConnection) {
+                                        setState(() {
+                                          _isConnected = false;
+                                        });
+                                        _authViewModel.errorMessage.value = 'Không có kết nối mạng. Vui lòng kiểm tra internet và thử lại.';
+                                        return;
                                       }
 
-                                      if (result == null) {
-                                        setState(
-                                          () => error =
-                                              'Email hoặc mật khẩu không đúng',
-                                        );
-                                      } else {
-                                        // **SỬA ĐỔI SNACKBAR Ở ĐÂY**
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: const Text(
-                                              'Đăng nhập thành công!',
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            backgroundColor: Colors.green,
-                                            behavior: SnackBarBehavior.floating,
-                                            margin: const EdgeInsets.only(
-                                              bottom: 50,
-                                              left: 20,
-                                              right: 20,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(24.0),
-                                            ),
-                                            duration: const Duration(
-                                              seconds: 1,
-                                            ),
-                                          ),
-                                        );
-
-                                        await Future.delayed(
-                                          const Duration(milliseconds: 1200),
-                                        );
-
-                                        if (mounted) {
-                                          Navigator.pushAndRemoveUntil(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  const MainNavigator(),
-                                            ),
-                                            (route) => false,
+                                      if (_formKey.currentState!.validate()) {
+                                        final success = await _authViewModel.login(email, password);
+                                        if (success) {
+                                          Get.snackbar(
+                                            'Thành công',
+                                            'Đăng nhập thành công!',
+                                            snackPosition: SnackPosition.BOTTOM,
+                                            backgroundColor: Colors.green.withOpacity(0.8),
+                                            colorText: Colors.white,
+                                            margin: const EdgeInsets.all(16),
+                                            borderRadius: 8,
+                                            icon: null,
                                           );
+                                          Get.offAll(() => const MainNavigator());
                                         }
                                       }
-                                    }
-                                  },
-                          ),
-                        ),
+                                    },
+                              child: _authViewModel.isLoading.value
+                                  ? const CircularProgressIndicator(color: Colors.white)
+                                  : const Text('Đăng nhập', style: TextStyle(fontSize: 18)),
+                            ),
+                          );
+                        }),
                         const SizedBox(height: 20),
-                        // Hiển thị cảnh báo mạng nếu không có kết nối
                         if (!_isConnected)
                           Container(
                             width: double.infinity,
@@ -265,39 +192,24 @@ class _LoginScreenState extends State<LoginScreen> {
                             decoration: BoxDecoration(
                               color: Colors.red.shade900.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.red.shade600,
-                                width: 1,
-                              ),
+                              border: Border.all(color: Colors.red.shade600, width: 1),
                             ),
                             child: Row(
                               children: [
-                                const Icon(
-                                  Icons.wifi_off,
-                                  color: Colors.red,
-                                  size: 24,
-                                ),
+                                const Icon(Icons.wifi_off, color: Colors.red, size: 24),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Không có kết nối mạng',
-                                        style: TextStyle(
-                                          color: Colors.red,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                        style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         'Vui lòng kiểm tra kết nối internet và thử lại.',
-                                        style: TextStyle(
-                                          color: Colors.red.shade200,
-                                          fontSize: 14,
-                                        ),
+                                        style: TextStyle(color: Colors.red.shade200, fontSize: 14),
                                       ),
                                     ],
                                   ),
@@ -305,22 +217,21 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                             ),
                           ),
-                        if (error.isNotEmpty)
-                          Text(
-                            error,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 14.0,
-                            ),
-                          ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const RegisterScreen(),
+                        Obx(() {
+                          if (_authViewModel.errorMessage.value.isNotEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                _authViewModel.errorMessage.value,
+                                style: const TextStyle(color: Colors.red, fontSize: 14.0),
                               ),
                             );
+                          }
+                          return const SizedBox.shrink();
+                        }),
+                        TextButton(
+                          onPressed: () {
+                            Get.to(() => const RegisterScreen());
                           },
                           child: Text.rich(
                             TextSpan(
@@ -330,9 +241,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 TextSpan(
                                   text: "Đăng ký",
                                   style: TextStyle(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.secondary,
+                                    color: Theme.of(context).colorScheme.secondary,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),

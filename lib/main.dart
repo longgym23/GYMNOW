@@ -1,11 +1,18 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show debugPaintSizeEnabled;
+import 'package:get/get.dart';
 import 'package:gym_now/screens/splash_screen.dart';
 import 'package:gym_now/services/notification_service.dart';
 import 'package:gym_now/widgets/network_banner.dart';
-import 'package:intl/date_symbol_data_local.dart'; // **<-- ĐÃ SỬA**
-import 'package:flutter_localizations/flutter_localizations.dart'; // **<-- THÊM MỚI**
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+// Clean Architecture & MVVM Imports
+import 'package:gym_now/data/datasources/auth_remote_datasource.dart';
+import 'package:gym_now/data/repositories_impl/auth_repository_impl.dart';
+import 'package:gym_now/domain/usecases/auth_usecases.dart';
+import 'package:gym_now/presentation/viewmodels/auth_viewmodel.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +25,23 @@ void main() async {
   // Tắt debug paint để loại bỏ viền xanh
   debugPaintSizeEnabled = false;
 
+  // Khởi tạo các dependency (Dependency Injection)
+  _setupDependencies();
+
   runApp(const MyApp());
+}
+
+void _setupDependencies() {
+  // Data Layer
+  Get.lazyPut<AuthRemoteDataSource>(() => AuthRemoteDataSourceImpl());
+  Get.lazyPut<AuthRepositoryImpl>(() => AuthRepositoryImpl(remoteDataSource: Get.find<AuthRemoteDataSource>()));
+
+  // Domain Layer
+  Get.lazyPut<AuthUseCases>(() => AuthUseCases(Get.find<AuthRepositoryImpl>()));
+
+  // Presentation Layer (ViewModel)
+  // Sử dụng Get.put để ViewModel luôn tồn tại
+  Get.put(AuthViewModel(authUseCases: Get.find<AuthUseCases>()), permanent: true);
 }
 
 class MyApp extends StatelessWidget {
@@ -26,18 +49,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return GetMaterialApp(
       title: 'GymNow Fitness',
-      debugShowCheckedModeBanner: false, // Tắt banner DEBUG
-      // **PHẦN THÊM MỚI ĐỂ HỖ TRỢ TIẾNG VIỆT**
+      debugShowCheckedModeBanner: false,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('vi', 'VN')],
-
-      // **KẾT THÚC PHẦN THÊM MỚI**
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0D1B2A),
@@ -47,9 +67,9 @@ class MyApp extends StatelessWidget {
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFFF8C00),
           secondary: Color(0xFF3A86FF),
-          background: Color(0xFF0D1B2A),
+          surface: Color(0xFF0D1B2A),
           onPrimary: Colors.white,
-          onBackground: Colors.white,
+          onSurface: Colors.white,
         ),
 
         appBarTheme: const AppBarTheme(
