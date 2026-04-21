@@ -60,6 +60,7 @@ dependencies:
   image_picker: ^1.0.7
   connectivity_plus: ^6.0.5
   internet_connection_checker: ^1.0.0+1
+  get: ^4.7.3
 dev_dependencies:
   flutter_test:
     sdk: flutter
