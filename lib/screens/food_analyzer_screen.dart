@@ -53,7 +53,7 @@ class _FoodAnalyzerScreenState extends State<FoodAnalyzerScreen> {
       final idToken = await user.getIdToken();
 
       // Dùng endpoint đã có sẵn trên backend: /askPTAI (hỗ trợ ảnh)
-      const url = 'https://gymnow-pt-ai.onrender.com/askPTAI';
+      const url = 'https://gymnow-e0pr.onrender.com/askPTAI';
       const prompt =
           'Hãy phân tích chi tiết món ăn/đồ uống trong ảnh và trả về CHỈ MỘT JSON hợp lệ. '
           'Bao gồm tất cả thông tin dinh dưỡng có thể: '

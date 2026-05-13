@@ -5,7 +5,7 @@ class EmailService {
   // URL của backend server (có thể thay đổi tùy theo cấu hình)
   // Nếu sử dụng Firebase Functions, URL sẽ là:
   // 'https://us-central1-gymnow-e1ebd.cloudfunctions.net/sendPinEmail'
-  static const String _backendUrl = 'https://gymnow-pt-ai.onrender.com';
+  static const String _backendUrl = 'https://gymnow-e0pr.onrender.com';
 
   // Gửi mã PIN qua email với retry logic
   Future<Map<String, dynamic>> sendPinEmail(String email, String pin) async {

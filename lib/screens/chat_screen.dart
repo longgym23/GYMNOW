@@ -462,7 +462,7 @@ class _ChatScreenState extends State<ChatScreen> {
         print('⚠️ Không có thông tin user');
       }
 
-      const apiUrl = 'https://gymnow-pt-ai.onrender.com/askPTAI';
+      const apiUrl = 'https://gymnow-e0pr.onrender.com/askPTAI';
       print('Sending request to: $apiUrl');
 
       final requestBody = jsonEncode({
